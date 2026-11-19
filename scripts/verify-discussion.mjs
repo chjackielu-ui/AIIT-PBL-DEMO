@@ -1,0 +1,25 @@
+// Use an isolated seed instance; keep all uploads/messages out of normal demo data.
+import assert from 'node:assert/strict'
+import {client} from './lib/api-client.mjs'
+const student=client(),teacher=client(),outsider=client(),archived=client()
+await student('/login',{id:'s1'});await teacher('/login',{id:'t1'});await outsider('/login',{id:'s6'});await archived('/login',{id:'s8'})
+async function upload(content){const data=new FormData();data.append('category','代码');data.append('file',new Blob([content],{type:'text/javascript'}),'findItems.js');return student('/projects/p1/files',data)}
+const before=await upload('export function findItems(items, keyword) {\n  return items.filter(item => item.title.includes(keyword));\n}\n')
+const after=await upload('export function findItems(items, keyword = "") {\n  const query = keyword.trim().toLowerCase();\n  return items.filter(item => item.title.toLowerCase().includes(query));\n}\n')
+await student('/actions',{op:'message',projectId:'p1',fileIds:[before.id,after.id],text:''})
+let state=await student('/state'),msg=state.projects.find(p=>p.id==='p1').messages.at(-1)
+assert.deepEqual(msg.fileIds,[before.id,after.id]);assert.equal(msg.fileId,before.id)
+await teacher('/actions',{op:'message',projectId:'p1',text:'@林同学 请确认空关键字与大小写处理。',replyToId:msg.id})
+await student('/actions',{op:'message',projectId:'p1',text:'原版搜索逻辑',code:'export const normalize = (value) => value;',codeName:'normalize.ts',codeLanguage:'typescript'})
+await student('/actions',{op:'message',projectId:'p1',text:'增加空值保护与标准化，修改处请在右侧对比。',code:'export const normalize = (value = "") => value.trim().toLowerCase();',codeName:'normalize.ts',codeLanguage:'typescript'})
+state=await student('/state')
+assert.equal(state.projects.find(p=>p.id==='p1').messages.at(-1).codeName,'normalize.ts')
+assert(state.projects.find(p=>p.id==='p1').messages.some(m=>m.replyToId===msg.id))
+assert(state.notifications.some(n=>n.title.includes('提及') && n.path==='/student/discussions/p1'))
+assert.equal(await student(`/projects/p1/files/${after.id}`),'export function findItems(items, keyword = "") {\n  const query = keyword.trim().toLowerCase();\n  return items.filter(item => item.title.toLowerCase().includes(query));\n}\n')
+await student('/actions',{op:'message',projectId:'p1',text:''},400)
+await student('/actions',{op:'message',projectId:'p1',text:'错误附件',fileIds:['missing-file']},404)
+await student('/actions',{op:'message',projectId:'p1',text:'错误回复',replyToId:'missing-message'},404)
+await outsider('/actions',{op:'message',projectId:'p1',text:'越权消息'},403)
+await archived('/actions',{op:'message',projectId:'p4',text:'归档只读'},400)
+console.log('PASS: 同名源码多版本上传、纯附件发送、多附件持久化、引用回复、代码文件名/语言、提及通知、源码读取、项目隔离与归档只读')

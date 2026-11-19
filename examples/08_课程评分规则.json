@@ -1,0 +1,22 @@
+{
+  "dimensions": [
+    {
+      "id": "attendance",
+      "name": "点名",
+      "weight": 20,
+      "source": "manual"
+    },
+    {
+      "id": "homework",
+      "name": "作业",
+      "weight": 20,
+      "source": "manual"
+    },
+    {
+      "id": "project",
+      "name": "实训进度",
+      "weight": 60,
+      "source": "project"
+    }
+  ]
+}

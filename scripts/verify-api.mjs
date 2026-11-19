@@ -1,0 +1,92 @@
+import assert from 'node:assert/strict'
+import {client} from './lib/api-client.mjs'
+const results=[]
+const admin=client(),teacher=client(),student=client(),other=client(),anonymous=client()
+const action=(c,op,data={},expected=200)=>c('/actions',{op,...data},expected)
+const check=(name)=>{results.push(name);console.log('PASS '+name)}
+await anonymous('/state',undefined,401);await admin('/login',{id:'a1'});await teacher('/login',{id:'t1'});await student('/login',{id:'s1'});await other('/login',{id:'s6'});check('会话登录与未登录访问拦截')
+// 夹具由隔离验证入口管理，不恢复或覆盖演示数据。
+const task={id:'',name:'验收 · 课程项目闭环',courseId:'c1',classId:'tc1',description:'完整课程项目验收',crossClass:false,min:2,max:5,teamDue:'2099-11-01',due:'2099-11-02',status:'已发布',milestones:[{id:'verify-phase',name:'验收阶段',description:'完成实现',due:'2099-12-01',materials:'代码文件',criteria:'可运行'},{id:'verify-final',name:'最终验收',description:'提交成果与贡献比例',due:'2099-12-15',materials:'成果材料',criteria:'完成目标',isFinal:true,requireMaterials:true}]}
+let r=await action(teacher,'saveTask',{task});task.id=r.id
+assert((await student('/state')).tasks.some(t=>t.id===task.id));check('教师发布课程任务，学生可见且收到通知')
+await action(student,'saveTask',{task},403)
+await action(student,'createProject',{taskId:task.id,name:'违规跨班',description:'测试',goal:'测试',memberIds:['s1','s6']},400)
+await action(teacher,'saveTask',{task:{...task,crossClass:true}})
+r=await action(student,'createProject',{taskId:task.id,name:'验收项目',description:'用于验证完整业务闭环',goal:'跑通申请与结项',tags:'Java / Vue',memberIds:['s1','s6']});const pid=r.id
+await action(student,'createProject',{taskId:task.id,name:'重复团队',description:'重复',goal:'重复',memberIds:['s1','s2']},400)
+await action(student,'editProject',{projectId:pid,name:'非法修改',description:'测试',goal:'测试'},400)
+await action(student,'reviewProject',{projectId:pid,pass:true,comment:'越权'},403)
+await action(teacher,'reviewProject',{projectId:pid,pass:false,comment:'补充目标'})
+await action(student,'editProject',{projectId:pid,name:'验收项目修订',description:'完善后的描述',goal:'完成全流程',tags:'Java / Vue',memberIds:['s1','s2']})
+let project=(await teacher('/state')).projects.find(p=>p.id===pid);assert.deepEqual(project.memberIds,['s1','s6'])
+await action(teacher,'reviewProject',{projectId:pid,pass:true,comment:'通过申请'})
+await action(student,'editProject',{projectId:pid,name:'违规修改',description:'测试',goal:'测试'},400)
+check('跨班规则、重复组队、申请退回重提、学生名单锁定与教师审核')
+await action(student,'addItem',{projectId:pid,title:'学生不可自建',ownerId:'s1',due:'2099-12-01'},403)
+await action(teacher,'addItem',{projectId:pid,title:'教师布置任务',ownerId:'s1',due:'2099-12-01'})
+project=(await student('/state')).projects.find(p=>p.id===pid);assert.equal(project.items[0].ownerId,'s1')
+await action(other,'itemStatus',{projectId:pid,itemId:project.items[0].id,status:'已完成'},400)
+await action(student,'itemStatus',{projectId:pid,itemId:project.items[0].id,status:'已完成'})
+await action(student,'message',{projectId:pid,text:'@李可欣 请确认代码',code:'const ready = true;',fileId:''})
+assert((await other('/state')).notifications.some(n=>n.title.includes('提及')));check('教师布置任务、学生仅更新负责的任务、讨论与 @通知')
+const upload=new FormData();upload.append('category','代码');upload.append('file',new Blob(['public class Demo {}'],{type:'text/plain'}),'Demo.java')
+const file=await student(`/projects/${pid}/files`,upload)
+const imageUpload=new FormData();imageUpload.append('category','图片');imageUpload.append('file',new Blob(['<svg xmlns="http://www.w3.org/2000/svg" width="500" height="200"><text y="50">Demo</text></svg>'],{type:'image/svg+xml'}),'result.svg')
+const image=await student(`/projects/${pid}/files`,imageUpload)
+await action(student,'submitPhase',{projectId:pid,milestoneId:'verify-phase',description:'提交代码',fileIds:[file.id]})
+project=(await teacher('/state')).projects.find(p=>p.id===pid)
+await action(teacher,'reviewPhase',{projectId:pid,submissionId:project.submissions[0].id,score:70,comment:'补充材料',pass:false})
+await action(student,'submitPhase',{projectId:pid,milestoneId:'verify-phase',description:'重新提交代码',fileIds:[file.id],baseSubmissionId:project.submissions[0].id})
+project=(await teacher('/state')).projects.find(p=>p.id===pid)
+assert.equal(project.submissions.length,2)
+await action(teacher,'reviewPhase',{projectId:pid,submissionId:project.submissions[1].id,score:95,comment:'材料完整',pass:true});check('真实文件上传、阶段成果退回与历史记录、重提验收')
+const final={summary:'完成系统',description:'交付成果',fileIds:[file.id],imageIds:[image.id],link:'',contributions:['s1','s6'].map(userId=>({userId,role:'开发',description:'功能开发与测试',percent:40,evidence:'Demo.java'})),comment:'',expertName:'',expertOrg:'',expertComment:''}
+await action(student,'submitFinal',{projectId:pid,final},400);final.contributions.forEach(c=>c.percent=50)
+await action(student,'submitFinal',{projectId:pid,final:{...final,fileIds:[image.id]}},400)
+await action(student,'submitFinal',{projectId:pid,final})
+await action(teacher,'reviewFinal',{projectId:pid,pass:false,comment:'补充项目总结'})
+await action(student,'submitFinal',{projectId:pid,final:{...final,summary:'补充后的完整项目总结'}})
+const graded={...final,projectScore:93,comment:'实现完整，分工明确',expertName:'演示专家',expertOrg:'演示单位',expertScore:91,expertComment:'交付符合要求',contributions:final.contributions.map((c,i)=>({...c,score:95-i*3,comment:'贡献明确'}))}
+await action(admin,'reviewFinal',{projectId:pid,pass:true,final:graded},403)
+await action(teacher,'reviewFinal',{projectId:pid,pass:true,final:graded})
+project=(await student('/state')).projects.find(p=>p.id===pid);assert.equal(project.status,'已归档');assert.equal(project.contributions[0].score,95)
+await action(student,'message',{projectId:pid,text:'不允许编辑'},400)
+await action(teacher,'message',{projectId:pid,text:'归档教师也不能直接修改'},400)
+check('贡献合计校验、源文件要求、结项退回重提、个人评分、自动归档只读')
+await action(student,'share',{projectId:pid,enabled:true})
+const pub=await anonymous('/public/'+project.shareId);assert.equal(pub.name,'验收项目修订');assert(!JSON.stringify(pub).includes('20230001'));for(const key of ['messages','files','memberIds','contributions','submissions'])assert(!(key in pub))
+await anonymous(`/public/${project.shareId}/images/${file.id}`,undefined,400)
+await action(student,'share',{projectId:pid,enabled:false});await anonymous('/public/'+project.shareId,undefined,400)
+await action(teacher,'reopen',{projectId:pid});assert.equal((await teacher('/state')).projects.find(p=>p.id===pid).status,'进行中');check('公开字段白名单、内部文件隔离、关闭分享及教师重新开放')
+await action(student,'historySave',{record:{id:'',name:'验收历史经历',year:'2025–2026',date:'2026-06-01',role:'开发',description:'负责开发',contribution:'完成实现',summary:'已交付'}})
+const h=(await student('/state')).history.find(h=>h.name==='验收历史经历');assert(h);await action(student,'historySave',{record:{...h,name:'已编辑的历史经历'}});await action(student,'historyDelete',{id:h.id})
+await action(student,'readNotices');assert((await student('/state')).notifications.every(n=>n.read));check('历史补录新增编辑删除、通知已读持久化')
+const base=Date.now().toString().slice(-7)
+for(const [kind,rows] of [['classes',[{id:'b'+base,name:'导入行政班'}]],['users',[{id:'s'+base,name:'导入学生',role:'student',number:'V'+base,classId:'b'+base}]],['courses',[{id:'c'+base,name:'导入课程'}]],['teachingClasses',[{id:'tc'+base,name:'导入教学班',courseId:'c'+base,teacherIds:['t1']}]],['enrollments',[{studentId:'s'+base,classId:'tc'+base}]]]){
+ const preview=await action(admin,'importPreview',{kind,rows});assert(preview.rows.every(r=>!r.error));await action(admin,'importConfirm',{kind,rows});const bad=await action(admin,'importPreview',{kind,rows});assert(bad.rows.some(r=>r.error));await action(admin,'importConfirm',{kind,rows},400)
+}
+assert((await teacher('/state')).teachingClasses.some(c=>c.id==='tc'+base))
+await action(student,'importConfirm',{kind:'classes',rows:[{id:'x',name:'越权'}]},403)
+check('五类基础数据导入、依赖校验、重复标识错误和角色拦截')
+await teacher('/login',{id:'t2'});assert(!(await teacher('/state')).projects.some(p=>p.id===pid));check('无关联教师不可读取项目')
+await teacher('/login',{id:'t1'})
+const classBody={name:'接口验证班 '+base,courseId:'c3',academicYear:'2027-2028',semester:'第二学期',studentIds:['s1','s2']}
+await action(student,'createTeachingClass',classBody,403)
+await action(teacher,'createTeachingClass',{...classBody,semester:'第三学期'},400)
+const classId=(await action(teacher,'createTeachingClass',classBody)).id
+await action(teacher,'createTeachingClass',classBody,400)
+const createdClass=(await teacher('/state')).teachingClasses.find(c=>c.id===classId)
+assert.deepEqual(createdClass.teacherIds,['t1'])
+assert((await student('/state')).teachingClasses.some(c=>c.id===classId))
+await teacher('/login',{id:'t2'});assert(!(await teacher('/state')).teachingClasses.some(c=>c.id===classId))
+await teacher('/login',{id:'t1'})
+check('创建教学班、学期校验、重复拦截与教师班级隔离')
+for(const category of ['reference','syllabus']){
+ const data=new FormData();data.append('category',category);data.append('file',new Blob(['课程资料'],{type:'text/plain'}),'reference.txt')
+ const uploaded=await teacher(`/classes/${classId}/files`,data)
+ assert.equal(await student(`/classes/${classId}/files/${uploaded.id}`),'课程资料')
+ await other(`/classes/${classId}/files/${uploaded.id}`,undefined,400)
+}
+check('课程大纲与参考资料上传、选课学生下载及班级文件隔离')
+console.log(`\n${results.length} groups passed. Persistence fixture: ${pid}`)
+
