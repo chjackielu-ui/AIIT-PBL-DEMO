@@ -16,7 +16,8 @@ import java.time.ZoneId;
 final class Migrations {
 
     /** 当前数据版本；state.version 落后于它时才执行对应迁移。 */
-    static final String VERSION = "1";
+    static final String VERSION = "3";
+    static final String THIRD_TERM = "第三学期";
 
     static String currentVersion(ObjectNode state) {
         return str(state, "version");
@@ -39,7 +40,6 @@ final class Migrations {
                     throw new IllegalStateException("教学班 " + str(tc, "id") + " 的学年学期数据无效：" + e.getReason());
                 }
             }
-            for (JsonNode t : list(state, "tasks")) PlatformService.ensureFinal((ObjectNode) t);
             for (JsonNode c : list(state, "classes")) {
                 if (str(c, "name").matches("软件工程 230[12]")) {
                     ((ObjectNode) c).put("name", "软件240" + str(c, "name").charAt(str(c, "name").length() - 1));
@@ -54,7 +54,15 @@ final class Migrations {
             }
             changed = true;
         }
-        if (!VERSION.equals(currentVersion(state))) {
+        if (currentVersion(state).isBlank() || currentVersion(state).equals("1")) {
+            for (JsonNode t : list(state, "tasks")) PlatformService.ensureFinal((ObjectNode) t);
+            state.put("version", "2");
+            changed = true;
+        }
+        if (currentVersion(state).equals("2")) {
+            for (JsonNode tc : list(state, "teachingClasses")) {
+                if (str(tc, "semester").equals("小学期")) ((ObjectNode) tc).put("semester", THIRD_TERM);
+            }
             state.put("version", VERSION);
             changed = true;
         }
@@ -78,7 +86,10 @@ final class Migrations {
         require(year.matches("[0-9]{4}") ||
             (year.matches("[0-9]{4}-[0-9]{4}") && Integer.parseInt(year.substring(5)) == Integer.parseInt(year.substring(0, 4)) + 1),
             "学年格式应为 2026 或 2026-2027");
-        require(java.util.List.of("第一学期", "第二学期", "小学期").contains(str(c, "semester")), "学期无效");
+        String semester = str(c, "semester").strip();
+        if (semester.equals("小学期")) semester = THIRD_TERM;
+        require(java.util.List.of("第一学期", "第二学期", THIRD_TERM).contains(semester), "学期无效");
+        c.put("semester", semester);
     }
 
     private static void require(boolean yes, String message) {

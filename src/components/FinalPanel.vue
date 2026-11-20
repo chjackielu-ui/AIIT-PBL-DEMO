@@ -9,23 +9,25 @@ import Status from './Status.vue'
 import DirectUpload from './DirectUpload.vue'
 import ReviewWorkbench from './ReviewWorkbench.vue'
 import DeliverablePicker from './DeliverablePicker.vue'
-import {phaseStatus} from '../projectPresentation'
+import {beforeDeadline, taskStarted} from '../taskMode'
+import {phaseStatus, projectPhases} from '../projectPresentation'
 import {deliverableFiles,validateDeliverables,submissionAttachmentIssue} from '../deliverables'
 
 const props = defineProps<{project: Project; readonly: boolean}>()
 const store = useStore()
 const teacher = computed(() => store.user?.role === 'teacher')
 const member = computed(() => props.project.memberIds.includes(store.user?.id || ''))
-const canSubmit=computed(()=>member.value && props.project.leaderId===store.user?.id && !props.readonly && ['进行中','结项待修改','结项待审核'].includes(props.project.status) && (props.project.status==='结项待修改' || (finalMilestone.value?.due || '')>=new Date().toLocaleDateString('sv-SE')))
+const task = computed(() => store.state?.tasks.find(t => t.id === props.project.taskId))
+const canSubmit=computed(()=>member.value && props.project.leaderId===store.user?.id && !props.readonly && ['进行中','结项待修改','结项待审核'].includes(props.project.status) && taskStarted(task.value) && (beforeDeadline(finalMilestone.value?.due) || !task.value?.startAt && props.project.status==='结项待修改'))
 const dialog = ref(false)
 const busy = ref(false)
 const grading = ref(false)
 const returnComment = ref('')
 const returnDialog = ref(false)
 
-const finalMilestone = computed(() => store.state?.tasks.find(t => t.id === props.project.taskId)?.milestones.find(m => m.isFinal))
+const finalMilestone = computed(() => task.value?.milestones.find(m => m.isFinal))
 const materialRequired = computed(() =>
-  store.state?.tasks.find(t => t.id === props.project.taskId)?.milestones.find(m => m.isFinal)?.requireMaterials !== false)
+  task.value?.milestones.find(m => m.isFinal)?.requireMaterials !== false)
 
 const empty = (): FinalResult => ({
   summary: '', description: '', fileIds: [], imageIds: [], link: '', deliverables:{},
@@ -40,9 +42,9 @@ const total = computed(() => form.contributions.reduce((n, c) => n + (Number(c.p
 const totalOk = computed(() => Math.abs(total.value - 100) < 0.01)
 
 const allPassed = computed(() =>
-  (store.state!.tasks.find(t => t.id === props.project.taskId)?.milestones
+  projectPhases(store.state?.tasks.find(t => t.id === props.project.taskId), props.project)
     .filter(m => !m.isFinal && m.requiresSubmission !== false)
-    .every(m => phaseStatus(props.project,m) === '已通过')) ?? false)
+    .every(m => phaseStatus(props.project,m) === '已通过'))
 
 /** 打开弹窗：材料取已提交的 final 快照，贡献以当前 project.contributions 为准
  *  （成员在提交后仍可能更新职责说明，提交时以最新为准；提交成员填写比例）。 */
@@ -152,7 +154,7 @@ const files = (ids: string[]) => props.project.files.filter(f => ids.includes(f.
       <el-form-item label="最终成果说明" required><el-input v-model="form.description" type="textarea" :rows="3" /></el-form-item>
       <DirectUpload :project-id="project.id" @uploaded="f=>{if(f.type.startsWith('image/'))form.imageIds.push(f.id);else form.fileIds.push(f.id)}" />
       <div class="form-grid">
-        <el-form-item :label="materialRequired ? '最终附件材料（直接上传后自动选中，包含代码 / 压缩包）' : '最终附件材料（可选）'">
+        <el-form-item :label="materialRequired ? (task?.startAt ? '最终附件（至少上传 1 个附件）' : '最终附件材料（含代码 / 压缩包）') : '最终附件材料（可选）'">
           <el-select v-model="form.fileIds" multiple>
             <el-option v-for="f in project.files" :key="f.id" :value="f.id" :label="`${f.name} · ${f.category}`" />
           </el-select>

@@ -1,5 +1,5 @@
 import type {State} from './types'
-import {pendingSubmissions} from './projectPresentation'
+import {pendingSubmissions, projectPhases} from './projectPresentation'
 
 /** 教师任教的全部教学班级（服务端已按任教关系过滤）。 */
 export function teachingClasses(s: State) {
@@ -13,12 +13,12 @@ export function classMetrics(s: State, classId?: string) {
   const taskIds = new Set(tasks.map(t => t.id))
   const projects = s.projects.filter(p => taskIds.has(p.taskId))
   const applications = projects.filter(p => p.status === '待审核').length
-  const stages = projects.reduce((n, p) => n + pendingSubmissions(p,tasks.find(t=>t.id===p.taskId)?.milestones || []).length, 0)
+  const stages = projects.reduce((n, p) => n + pendingSubmissions(p,projectPhases(tasks.find(t=>t.id===p.taskId),p)).length, 0)
   const grading = projects.filter(p => p.status === '结项待审核').length
   const archived = projects.filter(p => p.status === '已归档').length
   return {
     tasks,
-    projects,
+    projects: projects.filter(p => tasks.find(t => t.id === p.taskId)?.taskKind !== 'exercise'),
     applications,
     stages,
     grading,
@@ -39,7 +39,7 @@ export function taskPath(classId: string, id: string) {
 export function projectPath(s: State, id: string, tab = '') {
   const p = s.projects.find(p => p.id === id)
   const t = s.tasks.find(t => t.id === p?.taskId)
-  return t ? `${taskPath(t.classId,t.id)}?project=${encodeURIComponent(id)}${tab ? '&sourceTab=' + encodeURIComponent(tab) : ''}` : '/teacher/classes'
+  return t ? `${classPath(t.classId)}/projects/${encodeURIComponent(id)}${tab ? '?tab=' + encodeURIComponent(tab) : ''}` : '/teacher/classes'
 }
 
 /** 班级上下文入口（进入班级后由页面使用）。 */

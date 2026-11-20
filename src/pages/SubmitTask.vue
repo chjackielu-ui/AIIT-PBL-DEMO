@@ -4,7 +4,8 @@ import {useRoute, useRouter} from 'vue-router'
 import {useStore} from '../store'
 
 import {run, fileDownloadUrl, stamp} from '../lib'
-import {phaseSubmission, phaseStatus} from '../projectPresentation'
+import {beforeDeadline, taskStarted} from '../taskMode'
+import {phaseSubmission, phaseStatus, projectPhases} from '../projectPresentation'
 import {deliverableFiles,validateDeliverables,submissionAttachmentIssue} from '../deliverables'
 import PageHead from '../components/PageHead.vue'
 import DirectUpload from '../components/DirectUpload.vue'
@@ -13,20 +14,22 @@ import FinalPanel from '../components/FinalPanel.vue'
 const store=useStore(),route=useRoute(),router=useRouter()
 const p=computed(()=>store.state?.projects.find(p=>p.id===route.params.id))
 const task=computed(()=>store.state?.tasks.find(t=>t.id===p.value?.taskId))
-const m=computed(()=>task.value?.milestones.find(m=>m.id===route.params.phaseId))
+const m=computed(()=>projectPhases(task.value,p.value).find(m=>m.id===route.params.phaseId))
 const previous=computed(()=>p.value && m.value ? phaseSubmission(p.value,m.value,store.user?.id):undefined)
 const history=computed(()=>p.value?.submissions.filter(sub=>sub.milestoneId===m.value?.id && (m.value?.submissionMode!=='individual' || sub.submitterId===store.user?.id)).slice().reverse() || [])
-const canSubmit=computed(()=>p.value?.memberIds.includes(store.user?.id || '') && (m.value?.submissionMode==='individual' || p.value?.leaderId===store.user?.id) && ['进行中','结项待修改'].includes(p.value?.status || '') && previous.value?.status!=='已通过' && m.value?.requiresSubmission!==false && (previous.value?.status==='退回修改' || (m.value?.due || '')>=new Date().toLocaleDateString('sv-SE')))
+const requiredAttachments = computed(() => !!task.value?.startAt || m.value?.requireMaterials !== false)
+const canSubmit=computed(()=>p.value?.memberIds.includes(store.user?.id || '') && (m.value?.submissionMode==='individual' || p.value?.leaderId===store.user?.id) && ['进行中','结项待修改'].includes(p.value?.status || '') && previous.value?.status!=='已通过' && m.value?.requiresSubmission!==false && taskStarted(task.value) && (beforeDeadline(m.value?.due) || !task.value?.startAt && previous.value?.status==='退回修改'))
 const form=reactive({description:'',fileIds:[] as string[],deliverables:{} as Record<string,string[]>})
 const baseSubmissionId=ref('')
-const attachmentIssue=computed(()=>submissionAttachmentIssue(m.value?.deliverables || [],form.deliverables,[...form.fileIds,...deliverableFiles(form.deliverables)],m.value?.requireMaterials!==false))
+const attachmentIssue=computed(()=>submissionAttachmentIssue(m.value?.deliverables || [],form.deliverables,[...form.fileIds,...deliverableFiles(form.deliverables)],requiredAttachments.value))
 watch(()=>m.value?.id,()=>{
  const prev=previous.value
  Object.assign(form,{description:prev?.description || '',fileIds:[...(prev?.fileIds || [])],deliverables:JSON.parse(JSON.stringify(prev?.deliverables || {}))})
  baseSubmissionId.value=prev?.id || ''
 },{immediate:true})
 const busy=ref(false)
-const back=computed(()=>({path:`/student/projects/${p.value?.id}`,query:{tab:'board',origin:route.query.origin}}))
+const classTask = computed(() => task.value?.taskKind === 'exercise')
+const back = computed(() => classTask.value ? `/student/tasks/${task.value!.id}` : {path:`/student/projects/${p.value?.id}`,query:{tab:'board',origin:route.query.origin}})
 async function submit(){
  busy.value=true
  await run(async()=>{
@@ -42,19 +45,19 @@ async function submit(){
 </script>
 <template>
  <template v-if="p && m">
-  <PageHead :title="m.name"><el-button @click="router.push(back)">返回项目控制台</el-button></PageHead>
-  <section class="section"><h2>{{p.name}}</h2><p class="pre-wrap">{{p.description}}</p><p class="muted">项目目标：{{p.goal}}</p></section>
-  <section class="section"><div class="section-head"><h2>教师布置的任务</h2><el-tag>{{phaseStatus(p,m,store.user?.id)==='待验收'?'已提交':phaseStatus(p,m,store.user?.id)}}</el-tag></div><p class="pre-wrap">{{m.description}}</p><el-tag>{{m.submissionMode==='individual'?'成员分别提交 · 各自保存材料和评分':'整组提交 · 由组长统一提交'}}</el-tag><div class="details-grid"><div><small>截止日期</small>{{m.due}}</div><div><small>提交要求</small>{{m.materials || '填写成果说明'}}{{m.requireMaterials===false?'（附件可选）':''}}</div></div><div class="info-strip">评分标准：{{m.criteria}}</div></section>
+  <PageHead :title="m.name"><el-button @click="router.push(back)">{{classTask ? '返回班级任务' : '返回项目看板'}}</el-button></PageHead>
+  <section v-if="!classTask" class="section"><h2>{{p.name}}</h2><p class="pre-wrap">{{p.description}}</p></section>
+  <section class="section"><div class="section-head"><h2>教师布置的任务</h2><el-tag>{{phaseStatus(p,m,store.user?.id)==='待验收'?'已提交':phaseStatus(p,m,store.user?.id)}}</el-tag></div><p class="pre-wrap">{{m.description}}</p><el-tag v-if="!classTask">{{m.submissionMode==='individual'?'成员分别提交 · 各自保存材料和评分':'整组提交 · 由组长统一提交'}}</el-tag><div class="details-grid"><div><small>截止日期</small>{{stamp(m.due)}}</div><div><small>提交要求</small>{{requiredAttachments ? '至少上传 1 个附件' : '附件可选'}}</div></div><div v-if="!task?.startAt" class="info-strip">评分标准：{{m.criteria}}</div></section>
   <FinalPanel v-if="m.isFinal" :project="p" :readonly="!['进行中','结项待修改','结项待审核'].includes(p.status)" />
-  <section v-else class="section">
+  <section v-else-if="m.requiresSubmission!==false" class="section">
    <div class="section-head"><h2>提交内容</h2><strong v-if="previous?.score!=null">教师评分：{{previous.score}} / 100</strong></div><div v-if="previous?.comment" class="feedback">教师反馈：{{previous.comment}}</div>
-   <el-alert v-if="previous?.status==='待验收'" title="截止前、教师批改前可以修改提交内容；批改后锁定，教师退回后可重新提交。旧版本保留在历史记录中。" type="info" :closable="false" />
+   <el-alert v-if="previous?.status==='待验收'" title="截止前、教师批改前可以修改提交内容。旧版本会保留。" type="info" :closable="false" />
    <el-form label-position="top" @submit.prevent="submit">
-    <el-form-item label="成果说明" required><el-input v-model="form.description" type="textarea" :rows="5" :disabled="!canSubmit" /></el-form-item>
+    <el-form-item :label="classTask ? '作答内容' : '成果说明'" required><el-input v-model="form.description" type="textarea" :rows="5" :disabled="!canSubmit" /></el-form-item>
     <el-form-item label="上传成果附件"><DirectUpload v-if="canSubmit" :project-id="p.id" @uploaded="f=>form.fileIds.push(f.id)" /></el-form-item>
     <DeliverablePicker v-model="form.deliverables" :requirements="m.deliverables || []" :files="p.files" :disabled="!canSubmit" />
     <el-form-item label="附加材料 / 资料库文件"><el-select v-model="form.fileIds" multiple filterable :disabled="!canSubmit" placeholder="选择已有文件"><el-option v-for="f in p.files" :key="f.id" :value="f.id" :label="f.name" /></el-select></el-form-item>
-    <p class="muted">文件上传至项目资料库。逐项选择清单材料后，系统会将它们与附加材料一起提交；取消选择不会删除原文件。</p>
+    <p class="muted">逐项选择所需材料后，系统会将它们与附加材料一起提交。</p>
     <el-alert v-if="canSubmit && attachmentIssue" :title="attachmentIssue" type="warning" :closable="false" /><el-button v-if="canSubmit" type="primary" :disabled="!!attachmentIssue" :loading="busy" @click="submit">{{previous?'更新并提交':'提交给教师'}}</el-button>
     <el-alert v-else :title="previous?.status==='已通过'?'已批改通过，提交内容已锁定。教师退回后才可修改。':m.submissionMode!=='individual' && p.leaderId!==store.user?.id?'本任务由组长统一提交；你可以查看材料、分数与反馈。':'当前为查看状态；截止后无法修改未批改材料，教师退回后可重新提交。'" type="info" :closable="false" />
    </el-form>

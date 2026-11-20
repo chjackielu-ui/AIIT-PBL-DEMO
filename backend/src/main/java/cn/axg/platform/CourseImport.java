@@ -32,7 +32,7 @@ final class CourseImport {
                 require(number.matches("[0-9]{10}") && !name.isBlank() && name.length() <= 60, "请填写姓名和 10 位学号");
                 List<JsonNode> classes = service.list("teachingClasses").valueStream().filter(c ->
                     str(c,"name").equals(className) && str(c,"academicYear").startsWith("2026")
-                      && str(c,"semester").equals("小学期")).toList();
+                      && str(c,"semester").equals(Migrations.THIRD_TERM)).toList();
                 require(classes.size() == 1, "请先导入唯一匹配的 2026 年小学期教学班");
                 String classId = str(classes.get(0),"id");
                 JsonNode account = accounts.get(number);
@@ -84,10 +84,10 @@ final class CourseImport {
                 var teacher = service.user(str(data,"teacherId"));
                 service.only(teacher, "teacher");
                 Migrations.validateTerm(data);
-                require(str(data,"semester").equals("小学期"), "请填写小学期");
+                require(str(data,"semester").equals(Migrations.THIRD_TERM), "小学期课程请填写第三学期");
                 String year = str(data,"academicYear");
                 require(groups.add(year + ":" + name) && service.list("teachingClasses").valueStream().noneMatch(c ->
-                    str(c,"academicYear").equals(year) && str(c,"semester").equals("小学期") && str(c,"name").equals(name)),
+                    str(c,"academicYear").equals(year) && str(c,"semester").equals(Migrations.THIRD_TERM) && str(c,"name").equals(name)),
                     "该学年已有同名小学期教学班");
                 require(List.of("未开始","进行中","已结束").contains(str(data,"status")), "课程状态应为未开始、进行中或已结束");
                 LocalDateTime start = LocalDateTime.parse(str(data,"plannedStart").replace(' ', 'T'));

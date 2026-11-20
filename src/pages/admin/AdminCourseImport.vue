@@ -30,7 +30,7 @@ const courses = computed(() => {
   const teacherNames = new Map(state.users.filter(user => user.role === 'teacher').map(user => [user.id, user.name]))
   const enrollments = new Map<string, number>()
   for (const e of state.enrollments) enrollments.set(e.classId, (enrollments.get(e.classId) ?? 0) + 1)
-  return state.teachingClasses.filter(c => c.semester === '小学期').flatMap(c => {
+  return state.teachingClasses.filter(c => c.semester === '第三学期').flatMap(c => {
     const course = state.courses.find(item => item.id === c.courseId)
     return course ? [{
       ...course,
@@ -52,9 +52,9 @@ function template() {
   const defaultTeachers = [1, 1, 2, 2, 2, 3]
   const sample = names.map((name, index) => ({
     '课程标识': `summer26-${index + 1}`, '教学班名称': name,
-    '教师账号': store.state?.teachingClasses.find(c => c.name === name && c.semester === '小学期'
+    '教师账号': store.state?.teachingClasses.find(c => c.name === name && c.semester === '第三学期'
       && c.academicYear === '2026')?.teacherIds[0] ?? teachers.value.find(t => t.id === 'demo-teacher-' + defaultTeachers[index])?.id ?? '',
-    '学年': '2026', '学期': '小学期', '课程状态': '未开始',
+    '学年': '2026', '学期': '第三学期', '课程状态': '未开始',
     '计划开始时间': '2026-07-08 09:00', '计划结束时间': '2026-07-19 17:00',
     '实际开始时间': '', '实际结束时间': '',
     '评分规则JSON': '{"dimensions":[{"id":"project","name":"项目成果","weight":100,"source":"project"}]}',

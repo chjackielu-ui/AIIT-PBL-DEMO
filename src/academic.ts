@@ -9,7 +9,8 @@ export function currentTerm() {
   return {academicYear: `${start}-${start + 1}`, semester: m >= 2 && m <= 7 ? '第二学期' : '第一学期'}
 }
 
-const termOrder = (semester: string) => (semester === '第二学期' ? 2 : 1)
+export const semesters: readonly string[] = ['第一学期', '第二学期', '第三学期']
+export const termOrder = (semester: string) => semesters.indexOf(semester)
 
 /** 最新可用学年学期：优先返回与当前学期相同的班级；否则取排序最新（未来学年班级不遮蔽当前学期）。 */
 export function latestTerm(classes: TeachingClass[]) {

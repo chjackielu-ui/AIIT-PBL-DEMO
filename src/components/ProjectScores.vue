@@ -3,12 +3,12 @@ import {computed,ref} from 'vue'
 import {useStore} from '../store'
 
 import type {CourseTask,Milestone,Project} from '../types'
-import {phaseStatus,phaseScore,phaseSubmission,projectCourseScore} from '../projectPresentation'
+import {phaseStatus,phaseScore,phaseSubmission,projectCourseScore,projectPhases} from '../projectPresentation'
 import ScoreEditor from './ScoreEditor.vue'
 const props=defineProps<{project?:Project;task?:CourseTask}>(),store=useStore()
 const task=computed(()=>props.task || store.state?.tasks.find(t=>t.id===props.project?.taskId))
 const viewer=computed(()=>store.user?.role==='student'?store.user.id:undefined)
-const phases=computed(()=>task.value?.milestones.filter(m=>m.isFinal || m.requiresSubmission!==false) || [])
+const phases=computed(()=>projectPhases(task.value,props.project).filter(m=>m.isFinal || m.requiresSubmission!==false))
 const weight=computed(()=>phases.value.reduce((sum,m)=>sum+(m.scoreWeight ?? 1),0))
 const accumulated=computed(()=>props.project ? projectCourseScore(props.project, phases.value, viewer.value) : undefined)
 const showing=ref(false),selected=ref<Milestone>(),selectedMember=ref('')

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import {computed,ref,watch} from 'vue'
-import {Download,Upload,QrCode,Users} from 'lucide-vue-next'
+import {Download,Upload,QrCode} from 'lucide-vue-next'
 import QRCode from 'qrcode'
 import {ElMessage} from 'element-plus'
 import {useStore} from '../store'
@@ -53,15 +53,14 @@ async function confirmImport(){busy.value=true;await run(async()=>{result.value=
 async function copy(){await run(async()=>{await navigator.clipboard.writeText(url.value);ElMessage.success('入班链接已复制')},'')}
 </script>
 <template>
- <el-dialog v-model="open" title="添加选课学生" width="min(920px,94vw)" append-to-body>
+ <el-dialog v-model="open" title="扫码或批量添加学生" width="min(920px,94vw)" append-to-body>
   <p class="muted">{{tc?.name}} · 当前 {{roster.length}} 名选课学生</p>
-  <el-tabs v-model="tab"><el-tab-pane name="scan" label="扫码加入班级" /><el-tab-pane name="import" label="表格批量导入" /><el-tab-pane name="roster" label="本班学生" /></el-tabs>
+  <el-tabs v-model="tab"><el-tab-pane name="scan" label="扫码加入班级" /><el-tab-pane name="import" label="表格批量导入" /></el-tabs>
   <div v-if="tab==='scan'" v-loading="busy" class="class-invite-layout">
    <div class="class-invite-qr"><img v-if="qr" :src="qr" alt="扫码加入当前教学班" width="208" height="208" /><QrCode v-else :size="80" /><strong>{{tc?.name}}</strong></div>
    <div class="class-invite-info"><h3>学生扫码，确认后加入班级</h3><p class="muted">学生登录后确认自己的身份，即可加入本班并查看已发布任务；重复扫码不会重复添加。</p><el-form label-position="top"><el-form-item label="学生可访问的平台地址"><el-input v-model="base" placeholder="例如 http://192.168.1.100:8080" /></el-form-item><el-form-item label="入班链接"><el-input :model-value="url" readonly /></el-form-item></el-form><p class="muted">局域网演示时，学生设备与本机需在同一网络。可根据部署地址修改上方地址。</p><div class="actions wrap"><el-button :disabled="!url || !token" @click="copy">复制入班链接</el-button><a v-if="qr" :href="qr" download="班级入班二维码.png" class="upload-label"><Download :size="15" />下载二维码</a></div></div>
   </div>
   <template v-else-if="tab==='import'"><p>表格包含序号、姓名、学号、班级、联系方式。按学号识别已有账号，新学生自动建立账号并入班，重复入班自动跳过。</p><div class="actions wrap"><el-button @click="sample"><Download :size="15" />下载导入样表</el-button><label class="upload-label"><Upload :size="15" />{{busy?'读取中…':'上传学生表格'}}<input type="file" accept=".xlsx,.xls,.csv" :disabled="busy" @change="upload" /></label><span class="muted">{{filename}}</span></div><p class="muted">学号及联系方式请按文本填写，保留前导零；联系方式可留空。样表中的示例行请替换为实际名单。</p><el-alert v-if="result" :title="`已新增入班 ${result.added} 人，其中新建账号 ${result.created} 人；已在本班跳过 ${result.skipped} 人。`" type="success" :closable="false" /><el-table v-if="rows.length" :data="rows" max-height="340"><el-table-column prop="sequence" label="序号" width="65" /><el-table-column prop="name" label="姓名" width="100" /><el-table-column prop="number" label="学号" min-width="140" /><el-table-column prop="className" label="班级" min-width="120" /><el-table-column prop="contact" label="联系方式" min-width="140" /><el-table-column label="预览结果" min-width="180"><template #default="{row}"><span :class="row.error?'error-text':'muted'">{{row.error || row.status}}</span></template></el-table-column></el-table><p v-if="rows.length" :class="errors?'error-text':'muted'">共 {{rows.length}} 行，{{errors?errors+' 行需修正后重新上传':'确认名单后点击导入'}}</p><el-button v-if="rows.length" type="primary" :disabled="!!errors" :loading="busy" @click="confirmImport">确认导入 {{rows.length}} 名学生</el-button></template>
-  <template v-else><el-table :data="roster" max-height="380"><el-table-column type="index" label="序号" width="65" /><el-table-column prop="name" label="姓名" min-width="100" /><el-table-column prop="number" label="学号" min-width="150" /><el-table-column label="班级" min-width="120"><template #default="{row}">{{store.state?.classes.find(c=>c.id===row.classId)?.name || '—'}}</template></el-table-column><el-table-column label="联系方式" min-width="140"><template #default="{row}">{{row.contact || '—'}}</template></el-table-column><template #empty><Users :size="20" /> 学生扫码或导入后会显示在这里</template></el-table></template>
   <template #footer><el-button @click="open=false">关闭</el-button></template>
  </el-dialog>
 </template>

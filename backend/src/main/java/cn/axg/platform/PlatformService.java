@@ -60,6 +60,7 @@ public class PlatformService {
 
     /** 保证任务含唯一且置于末尾的最终验收阶段（种子与迁移共用）。 */
     static void ensureFinal(ObjectNode t) {
+        if (exercise(t)) return;
         boolean found = false;
         for (JsonNode m : t.path("milestones")) if (m.path("isFinal").asBoolean()) found = true;
         if (!found) {
@@ -67,7 +68,7 @@ public class PlatformService {
                 ? str(t, "due")
                 : str(t.path("milestones").get(t.path("milestones").size() - 1), "due");
             ((ArrayNode) t.get("milestones")).add(o(
-                "id", "final-" + str(t, "id"),
+                "id", str(t, "id").isBlank() ? id() : "final-" + str(t, "id"),
                 "name", "最终项目验收",
                 "description", "提交项目成果与团队贡献比例，由教师评分确认。",
                 "due", due,
@@ -76,6 +77,48 @@ public class PlatformService {
                 "isFinal", true,
                 "requireMaterials", true));
         }
+    }
+
+    static boolean exercise(JsonNode task) { return task != null && str(task, "taskKind").equals("exercise"); }
+
+    static List<JsonNode> projectPhases(JsonNode task, JsonNode project) {
+        List<JsonNode> phases = new ArrayList<>();
+        JsonNode shared = task.path("milestones");
+        shared.forEach(m -> { if (!m.path("isFinal").asBoolean()) phases.add(m); });
+        if (project != null) project.path("milestones").forEach(phases::add);
+        shared.forEach(m -> { if (m.path("isFinal").asBoolean()) phases.add(m); });
+        return phases;
+    }
+
+    private List<JsonNode> phases(JsonNode project) {
+        return projectPhases(find("tasks", str(project, "taskId")), project);
+    }
+
+    private int validatePhases(JsonNode phases) {
+        require(phases.isArray() && phases.size() <= 100, "阶段列表无效或超过 100 项");
+        Map<String, JsonNode> nodes = new HashMap<>();
+        int finals = 0;
+        for (JsonNode phase : phases) {
+            require(phase.isObject(), "阶段格式无效");
+            if (phase.path("isFinal").asBoolean()) finals++;
+            text(phase, "name", "description", "due", "criteria");
+            if (str(phase, "id").isBlank()) ((ObjectNode) phase).put("id", id());
+            require(nodes.putIfAbsent(str(phase, "id"), phase) == null, "阶段标识重复");
+            validateDeliverableRules(phase);
+            Grading.validate(phase);
+        }
+        for (JsonNode phase : phases) {
+            Set<String> visited = new HashSet<>();
+            visited.add(str(phase, "id"));
+            String parentId = str(phase, "parentId");
+            while (!parentId.isBlank()) {
+                JsonNode parent = nodes.get(parentId);
+                require(parent != null && !parent.path("isFinal").asBoolean(), "上级阶段不存在或属于最终验收");
+                require(visited.add(parentId), "阶段分支不能形成循环");
+                parentId = str(parent, "parentId");
+            }
+        }
+        return finals;
     }
 
     // —— 基础工具 ——
@@ -202,6 +245,40 @@ public class PlatformService {
         return safe;
     }
 
+    private Path avatarPath(String uid) {
+        return repository.file("profile-avatar", uid);
+    }
+
+    public synchronized long saveAvatar(String uid, MultipartFile file) throws IOException {
+        user(uid);
+        Path target = avatarPath(uid);
+        ProfileAvatar.save(target, file);
+        return Files.getLastModifiedTime(target).toMillis();
+    }
+
+    public synchronized void removeAvatar(String uid) throws IOException {
+        user(uid);
+        Files.deleteIfExists(avatarPath(uid));
+    }
+
+    public synchronized byte[] avatar(String uid) throws IOException {
+        user(uid);
+        Path path = avatarPath(uid);
+        if (!Files.isRegularFile(path)) throw new ResponseStatusException(HttpStatus.NOT_FOUND);
+        return Files.readAllBytes(path);
+    }
+
+    private ArrayNode profileTags(JsonNode tags) {
+        require(tags.isArray() && tags.size() <= 10, "每组最多填写 10 个标签");
+        Set<String> names = new LinkedHashSet<>();
+        for (JsonNode tag : tags) {
+            String value = tag.asText("").strip();
+            require(tag.isTextual() && !value.isBlank() && value.length() <= 30, "标签应为 1–30 个字符");
+            names.add(value);
+        }
+        return M.valueToTree(names);
+    }
+
     private void bootstrap(String password, boolean demo) throws IOException {
         boolean changed = false;
         if (!password.isBlank() && list("users").valueStream().noneMatch(u -> role(u).equals("admin"))) {
@@ -228,12 +305,19 @@ public class PlatformService {
     }
 
     private ObjectNode newAccount(String id, String name, String role, String number, String password) {
-        return o("id", id, "name", name, "role", role, "number", number, "enabled", true,
-            "passwordHash", Passwords.hash(password));
+        ObjectNode account = o("id", id, "name", name, "role", role, "number", number, "enabled", true);
+        if (!password.isEmpty()) account.put("passwordHash", Passwords.hash(password));
+        return account;
     }
 
     static void validatePassword(String password) {
         require(password.length() >= 8 && password.length() <= 128, "密码应为 8–128 个字符");
+    }
+
+    private void resetPassword(ObjectNode account, String password) {
+        validatePassword(password);
+        account.put("passwordHash", Passwords.hash(password));
+        account.put("sessionVersion", account.path("sessionVersion").asLong() + 1);
     }
 
     public synchronized void register(ObjectNode body) throws IOException {
@@ -283,7 +367,14 @@ public class PlatformService {
     public synchronized ObjectNode view(String uid) {
         ObjectNode u = user(uid);
         ObjectNode result = state.deepCopy();
-        result.set("user", safeAccount(u));
+        ObjectNode self = safeAccount(u);
+        try {
+            Path avatar = avatarPath(uid);
+            if (Files.isRegularFile(avatar)) self.put("avatarVersion", Files.getLastModifiedTime(avatar).toMillis());
+        } catch (IOException ignored) {
+            // An unavailable avatar must not prevent loading the workspace.
+        }
+        result.set("user", self);
         ((ObjectNode) result.get("user")).remove("sessionVersion");
         if (mysql) {
             ArrayNode users = a();
@@ -332,7 +423,7 @@ public class PlatformService {
             for (JsonNode c : result.path("teachingClasses")) visibleClasses.add(str(c, "id"));
             result.set("enrollments", filtered(list("enrollments"), e -> visibleClasses.contains(str(e, "classId"))));
             for (JsonNode account : result.path("users")) {
-                if (!str(account, "id").equals(uid)) ((ObjectNode) account).remove(List.of("hasPassword", "permissions"));
+                if (!str(account, "id").equals(uid)) ((ObjectNode) account).remove(List.of("hasPassword", "permissions", "bio", "interests", "techStack"));
             }
         }
         if (!role(u).equals("admin")) {
@@ -471,15 +562,16 @@ public class PlatformService {
     }
     void checkFinal(ObjectNode p, ObjectNode f, boolean grading) {
         text(f, "summary", "description");
+        boolean scheduled = TaskSchedule.scheduled(find("tasks", str(p, "taskId")));
         boolean required = true;
         JsonNode finalPhase = null;
-        for (JsonNode m : find("tasks", str(p, "taskId")).path("milestones"))
+        for (JsonNode m : phases(p))
             if (m.path("isFinal").asBoolean()) { required = m.path("requireMaterials").asBoolean(true); finalPhase = m; }
-        submissionFiles(p, f.path("fileIds"), required);
+        submissionFiles(p, f.path("fileIds"), scheduled ? !grading : required);
         submissionFiles(p, f.path("imageIds"), false);
         // 最终附件必须包含代码 / 源文件压缩包（截图等展示材料走成果截图，不能充当源文件）
         if (finalPhase != null && !grading) checkDeliverables(p, finalPhase, f);
-        if (required && (finalPhase == null || finalPhase.path("deliverables").isEmpty())) {
+        if (!scheduled && required && (finalPhase == null || finalPhase.path("deliverables").isEmpty())) {
             boolean hasSource = false;
             for (JsonNode fid : f.path("fileIds")) {
                 ObjectNode file = nested(p, "files", fid.asText());
@@ -548,13 +640,14 @@ public class PlatformService {
     ObjectNode mutate(ObjectNode u, ObjectNode b) throws IOException {
         String op = str(b, "op"), uid = str(u, "id"), pid = str(b, "projectId");
         String permission = switch (op) {
-            case "saveTask", "addItem" -> "tasks";
+            case "saveTask", "saveProjectPhases", "addItem" -> "tasks";
             case "reviewProject", "batchReviewProjects", "reopen" -> "projectReview";
             case "reviewPhase", "reviewFinal" -> "assessment";
             case "saveCourseGrades", "saveCourseDetails" -> "courseGrades";
             case "editFile" -> "projectFiles";
             case "message" -> "discussion";
-            case "importClassStudents", "addClassStudents", "createClassInvite" -> "roster";
+            case "importClassStudents", "addClassStudents", "addClassStudent", "removeClassStudent",
+                "resetClassStudentPassword", "createClassInvite" -> "roster";
             case "share" -> "sharing";
             default -> "";
         };
@@ -581,6 +674,24 @@ public class PlatformService {
                 permissions.add(item.asText());
             }
             teacher.set("permissions", M.valueToTree(permissions));
+        }
+        case "updateProfile" -> {
+            require(b.path("bio").isTextual(), "请输入有效的个性签名");
+            String bio = str(b, "bio").strip();
+            require(bio.length() <= 160, "个性签名最多 160 个字符");
+            u.put("bio", bio);
+            u.set("interests", profileTags(b.path("interests")));
+            u.set("techStack", profileTags(b.path("techStack")));
+        }
+        case "changePassword" -> {
+            require(mysql, "当前存储模式不支持修改密码");
+            require(Passwords.matches(str(b, "currentPassword"), str(u, "passwordHash")), "当前密码不正确");
+            String next = str(b, "newPassword");
+            validatePassword(next);
+            require(!next.equals(str(b, "currentPassword")), "新密码不能与当前密码相同");
+            long version = u.path("sessionVersion").asLong() + 1;
+            u.put("passwordHash", Passwords.hash(next)).put("sessionVersion", version);
+            result.put("sessionVersion", version);
         }
         case "setAccountPassword" -> {
             only(u, "admin");
@@ -659,49 +770,99 @@ public class PlatformService {
                 if (!enrolled(studentId, str(tc, "id"))) list("enrollments").add(o("studentId", studentId, "classId", str(tc, "id")));
             }
         }
+        case "addClassStudent" -> {
+            String cid = str(b, "classId");
+            ClassEnrollment.managedClass(this, u, cid);
+            String number = str(b, "number").strip(), name = str(b, "name").strip();
+            require(number.matches("[0-9]{10}"), "请输入 10 位学号");
+            require(!name.isBlank() && name.length() <= 60, "请输入有效姓名");
+            ObjectNode student = (ObjectNode) list("users").valueStream()
+                .filter(account -> number.equals(str(account, "number"))).findFirst().orElse(null);
+            if (student == null) {
+                String adminClassId = str(b, "administrativeClassId"), contact = str(b, "contact").strip();
+                require(adminClassId.isBlank() || findOrNull("classes", adminClassId) != null, "行政班不存在");
+                require(contact.length() <= 100, "联系方式最多 100 个字符");
+                String password = str(b, "password");
+                if (!password.isEmpty()) validatePassword(password);
+                student = newAccount(id(), name, "student", number, password);
+                if (!adminClassId.isBlank()) student.put("classId", adminClassId);
+                if (!contact.isBlank()) student.put("contact", contact);
+                list("users").add(student);
+            } else {
+                only(student, "student");
+                require(student.path("enabled").asBoolean() && name.equals(str(student, "name")), "姓名与学号不匹配或账号已停用");
+            }
+            String studentId = str(student, "id");
+            require(!enrolled(studentId, cid), "学生已在本班");
+            list("enrollments").add(o("studentId", studentId, "classId", cid));
+        }
+        case "removeClassStudent", "resetClassStudentPassword" -> {
+            String cid = str(b, "classId"), sid = str(b, "studentId");
+            ClassEnrollment.managedClass(this, u, cid);
+            require(enrolled(sid, cid), "只能操作本班学生");
+            ObjectNode student = find("users", sid);
+            only(student, "student");
+            if (op.equals("resetClassStudentPassword")) {
+                require(mysql, "当前存储模式不支持修改密码");
+                resetPassword(student, str(b, "password"));
+            } else {
+                ArrayNode enrollments = list("enrollments");
+                for (int i = enrollments.size() - 1; i >= 0; i--) {
+                    JsonNode e = enrollments.get(i);
+                    if (str(e, "classId").equals(cid) && str(e, "studentId").equals(sid)) enrollments.remove(i);
+                }
+            }
+        }
         case "saveTask" -> {
             only(u, "teacher");
             ObjectNode t = ((ObjectNode) b.path("task")).deepCopy();
-            text(t, "name", "description", "classId", "courseId", "teamDue", "due");
+            text(t, "name", "classId", "courseId");
+            if (!str(t, "status").equals("草稿")) text(t, "description");
             ObjectNode tc = find("teachingClasses", str(t, "classId"));
             require(contains(tc.path("teacherIds"), uid), "只能向自己的教学班发布任务");
             require(str(tc, "courseId").equals(str(t, "courseId")), "课程与教学班不匹配");
             String kind=t.path("taskKind").asText("training");
             require(List.of("training","exercise").contains(kind),"课程任务形式无效");
-            if(kind.equals("exercise"))t.put("projectType","individual");
+            ObjectNode previous = str(t, "id").isBlank() ? null : find("tasks", str(t, "id"));
+            boolean scheduled = TaskSchedule.scheduled(t);
+            require(!mysql || previous != null || scheduled, "发布前请设置开始时间和结束时间");
+            require(previous == null || !TaskSchedule.scheduled(previous) || scheduled, "不能移除已设置的开始时间");
+            if (scheduled) {
+                TaskSchedule.validate(t);
+                t.put("teamDue", str(t, "due"));
+                boolean existingPersonalProject = previous != null && !exercise(previous) && individual(previous)
+                    && list("projects").valueStream().anyMatch(p -> str(p, "taskId").equals(str(t, "id")));
+                if (!exercise(t) && !existingPersonalProject) {
+                    t.put("projectType", "group");
+                    require(t.path("min").asInt() >= 2, "小组项目至少需要两名成员");
+                }
+            }
+            if (exercise(t)) t.put("projectType", "individual");
             if (!t.hasNonNull("projectType")) t.put("projectType", individual(t) ? "individual" : "group");
             require(List.of("individual", "group").contains(str(t, "projectType")), "请选择个人项目或小组项目");
             if (individual(t)) { t.put("min", 1); t.put("max", 1); t.put("crossClass", false); }
             require(t.path("min").asInt() >= 1 && t.path("max").asInt() >= t.path("min").asInt() && t.path("max").asInt() <= 20,
                 "组队人数需为 1–20 且上限不小于下限");
-            require(str(t, "teamDue").compareTo(str(t, "due")) <= 0, "组队截止不能晚于申请截止");
             require(t.path("milestones").isArray(), "任务列表格式无效");
-            Set<String> ms = new HashSet<>();
-            int finals = 0;
-            for (JsonNode m : t.path("milestones")) {
-                if (m.path("isFinal").asBoolean()) finals++;
-                text(m, "name", "description", "due", "criteria");
-                if (str(m, "id").isBlank()) ((ObjectNode) m).put("id", id());
-                require(ms.add(str(m, "id")), "阶段标识重复");
-                validateDeliverableRules(m);
-                Grading.validate(m);
-            }
-            Map<String,JsonNode> nodes = new HashMap<>();
-            for (JsonNode m : t.path("milestones")) nodes.put(str(m,"id"),m);
-            for (JsonNode m : t.path("milestones")) {
-                Set<String> visited = new HashSet<>();
-                visited.add(str(m,"id"));
-                String parentId = str(m,"parentId");
-                while (!parentId.isBlank()) {
-                    JsonNode parent = nodes.get(parentId);
-                    require(parent != null && !parent.path("isFinal").asBoolean(), "上级阶段不存在或属于最终验收");
-                    require(visited.add(parentId), "阶段分支不能形成循环");
-                    parentId = str(parent,"parentId");
+            ensureFinal(t);
+            int finals = validatePhases(t.path("milestones"));
+            if (exercise(t)) {
+                require(t.path("milestones").size() == 1 && finals == 0
+                    && t.path("milestones").get(0).path("requiresSubmission").asBoolean(true), "班级任务须保留一项独立作答");
+                ObjectNode phase = (ObjectNode) t.path("milestones").get(0);
+                if (scheduled) phase.put("due", str(t, "due")).put("requireMaterials", true);
+                else t.put("due", str(phase, "due")).put("teamDue", str(phase, "due"));
+            } else {
+                text(t, "teamDue", "due");
+                require(str(t, "teamDue").compareTo(str(t, "due")) <= 0, "组队截止不能晚于申请截止");
+                ObjectNode finalPhase = (ObjectNode) t.path("milestones").get(t.path("milestones").size() - 1);
+                require(finals == 1 && finalPhase.path("isFinal").asBoolean(), "课程项目必须有且仅有一项最终成果验收，并置于最后");
+                finalPhase.put("requiresSubmission", true).put("submissionMode", "shared");
+                if (scheduled) {
+                    finalPhase.put("due", str(t, "due")).put("requireMaterials", true);
+                    for (JsonNode phase : t.path("milestones")) if (!phase.path("isFinal").asBoolean()) TaskSchedule.validatePhase(t, phase);
                 }
             }
-            require(finals <= 1 && (finals == 0 || t.path("milestones").get(t.path("milestones").size() - 1).path("isFinal").asBoolean()),
-                "最多发布一个项目验收任务并置于最后");
-            if(kind.equals("exercise"))require(t.path("milestones").size()==1 && finals==0 && t.path("milestones").get(0).path("requiresSubmission").asBoolean(true),"小练习需保留一项需提交的练习任务");
             require(List.of("已发布", "草稿", "已关闭").contains(str(t, "status")), "任务状态无效");
             boolean fresh = str(t, "id").isBlank();
             if (fresh) {
@@ -710,14 +871,23 @@ public class PlatformService {
                 t.put("created", now());
                 list("tasks").add(t);
             } else {
-                ObjectNode old = find("tasks", str(t, "id"));
+                ObjectNode old = previous;
                 require(related(u, old) && !str(old, "status").equals("已关闭"), "已关闭任务不可编辑或无任课权限");
                 require(str(old, "classId").equals(str(t, "classId")) && str(old, "courseId").equals(str(t, "courseId")),
                     "任务必须保留在原教学班级及关联课程中，请在目标班级新建任务");
+                if (!exercise(old) && !exercise(t)) {
+                    JsonNode originalFinal = old.path("milestones").valueStream().filter(m -> m.path("isFinal").asBoolean()).findFirst().orElse(null);
+                    JsonNode finalPhase = t.path("milestones").get(t.path("milestones").size() - 1);
+                    require(originalFinal == null || str(originalFinal, "id").equals(str(finalPhase, "id")), "最终成果验收只能修改，不能移除或替换");
+                }
                 for (JsonNode p : list("projects")) {
                     if (!str(p, "taskId").equals(str(t, "id"))) continue;
                     require(individual(old) == individual(t), "已有项目时不能修改项目类型，请新建实训任务");
                     require(old.path("taskKind").asText("training").equals(kind),"已有项目时不能变更课程任务形式");
+                    require(p.path("milestones").valueStream().noneMatch(local -> t.path("milestones").valueStream()
+                        .anyMatch(shared -> str(shared, "id").equals(str(local, "id")))), "阶段标识与项目子任务冲突");
+                    if (exercise(t)) require(str(old.path("milestones").get(0), "id").equals(str(t.path("milestones").get(0), "id")), "已有作答时不能替换作答阶段");
+                    if (scheduled) for (JsonNode phase : p.path("milestones")) TaskSchedule.validatePhase(t, phase);
                 }
                 t.put("created", old.path("created").asText(""));
                 t.put("teacherId", str(old, "teacherId"));
@@ -737,33 +907,45 @@ public class PlatformService {
             }
             result.put("id", str(t, "id"));
         }
-        case "createProject" -> {
+        case "startClassTask", "createProject" -> {
             only(u, "student");
             ObjectNode t = find("tasks", str(b, "taskId"));
+            boolean classTask = exercise(t);
+            require(!op.equals("startClassTask") || classTask, "只能直接开始班级任务");
+            if (classTask) {
+                for (JsonNode p : list("projects")) {
+                    if (str(p, "taskId").equals(str(t, "id")) && contains(p.path("memberIds"), uid)) return result.put("id", str(p, "id"));
+                }
+            }
             require(canTask(u, t) && str(t, "status").equals("已发布"), "任务未发布、已关闭或不在可参与范围内");
+            require(TaskSchedule.started(t), "任务尚未开始");
             String today = LocalDate.now(ZoneId.of("Asia/Shanghai")).toString();
-            require(today.compareTo(str(t, "teamDue")) <= 0 && today.compareTo(str(t, "due")) <= 0, "组队或申请截止时间已过");
-            text(b, "name", "description", "goal");
-            require(b.path("memberIds").isArray(), "成员名单无效");
-            ArrayNode members = (ArrayNode) b.get("memberIds");
+            String due = classTask ? str(t.path("milestones").path(0), "due") : str(t, "due");
+            require(TaskSchedule.beforeDeadline(due) && (classTask || TaskSchedule.scheduled(t) || TaskSchedule.beforeDeadline(str(t, "teamDue"))),
+                classTask ? "班级任务已截止" : "课程项目已截止");
+            ObjectNode request = classTask ? o("name", str(t, "name"), "description", str(t, "description"),
+                "memberIds", a(uid)) : b;
+            text(request, "name", "description");
+            require(request.path("memberIds").isArray(), "成员名单无效");
+            ArrayNode members = (ArrayNode) request.get("memberIds");
             validateMembers(t, members, uid, "");
             String projectId = id();
-            ObjectNode p = o("id", projectId, "taskId", str(t, "id"), "name", str(b, "name"), "description", str(b, "description"),
-                "goal", str(b, "goal"), "tags", str(b, "tags"), "leaderId", uid, "memberIds", members.deepCopy(),
-                "projectType", individual(t) ? "individual" : "group", "status", individual(t) ? "进行中" : "待审核", "created", today, "share", false, "shareId", id(), "reviewComment", "",
+            ObjectNode p = o("id", projectId, "taskId", str(t, "id"), "name", str(request, "name"), "description", str(request, "description"),
+                "tags", str(request, "tags"), "leaderId", uid, "memberIds", members.deepCopy(),
+                "projectType", individual(t) ? "individual" : "group", "status", classTask ? "进行中" : "待审核", "created", today, "share", false, "shareId", id(), "reviewComment", "",
                 "items", a(), "files", a(), "messages", a(), "submissions", a(), "contributions", contributions(members),
                 "finalHistory", a(), "activity", a());
             list("projects").add(p);
-            activity(p, u, individual(t) ? "创建个人项目，可独立提交材料" : "提交小组项目申请，成员名单已锁定");
-            notifyTeachers(p, individual(t) ? "学生已创建个人项目" : "新的项目申请");
+            activity(p, u, classTask ? "开始班级任务" : "提交项目申请，成员名单已锁定");
+            if (!classTask) notifyTeachers(p, "新的项目申请");
             result.put("id", projectId);
         }
         case "editProject" -> {
             ObjectNode p = project(u, pid);
             leader(u, p);
             require(str(p, "status").equals("待修改"), "仅可修改教师退回的项目申请");
-            text(b, "name", "description", "goal");
-            for (String k : List.of("name", "description", "goal", "tags")) p.put(k, str(b, k));
+            text(b, "name", "description");
+            for (String k : List.of("name", "description", "tags")) p.put(k, str(b, k));
             p.put("status", "待审核");
             notifyTeachers(p, "项目申请重新提交");
             activity(p, u, "更新项目申请信息");
@@ -789,15 +971,43 @@ public class PlatformService {
             activity(p, u, "项目申请" + (b.path("pass").asBoolean() ? "审核通过" : "退回修改") + "：" + str(b, "comment"));
             notifyMembers(p, "项目申请审核结果", str(b, "comment"));
         }
+        case "saveProjectPhases" -> {
+            ObjectNode p = project(u, pid);
+            teacher(u, p);
+            require(List.of("进行中", "结项待修改").contains(str(p, "status")), "只能给已通过申请且可提交成果的项目安排子任务");
+            ObjectNode t = find("tasks", str(p, "taskId"));
+            require(!exercise(t), "班级任务没有项目子任务");
+            int revision = p.path("milestoneRevision").asInt();
+            require(revision == b.path("revision").asInt(0), "子任务已更新，请刷新后重试");
+            JsonNode local = b.path("milestones").deepCopy();
+            require(validatePhases(local) == 0, "最终成果验收由课程项目统一设置");
+            for (JsonNode phase : local) {
+                require(t.path("milestones").valueStream().noneMatch(m -> str(m, "id").equals(str(phase, "id"))), "阶段标识与课程项目冲突");
+                if (TaskSchedule.scheduled(t)) TaskSchedule.validatePhase(t, phase);
+            }
+            for (JsonNode phase : p.path("milestones")) {
+                String phaseId = str(phase, "id");
+                if (p.path("submissions").valueStream().anyMatch(sub -> str(sub, "milestoneId").equals(phaseId))) {
+                    JsonNode updated = local.valueStream().filter(m -> str(m, "id").equals(phaseId)).findFirst().orElse(null);
+                    require(updated != null && submissionMode(updated).equals(submissionMode(phase))
+                        && updated.path("requiresSubmission").asBoolean(true), "已有提交的子任务不能删除或更改提交方式");
+                }
+            }
+            p.set("milestones", local);
+            p.put("milestoneRevision", revision + 1);
+            activity(p, u, "更新项目子任务与阶段要求");
+            notifyMembers(p, "项目子任务已更新", str(p, "name"));
+        }
         case "addItem" -> {
             only(u, "teacher");
             ObjectNode p = project(u, pid);
-            editable(u, p);
+            require(List.of("进行中", "结项待修改").contains(str(p, "status"))
+                && !exercise(find("tasks", str(p, "taskId"))), "只能给进行中的课程项目布置工作项");
             text(b, "title", "due");
-            String owner = role(u).equals("student") ? uid : str(b, "ownerId");
+            String owner = str(b, "ownerId");
             require(contains(p.path("memberIds"), owner), "任务负责人必须是项目成员");
             ((ArrayNode) p.get("items")).add(o("id", id(), "title", str(b, "title"), "ownerId", owner,
-                "status", "待开始", "due", str(b, "due"), "source", role(u).equals("teacher") ? "教师任务" : "个人任务"));
+                "status", "待开始", "due", str(b, "due"), "source", "教师任务"));
             activity(p, u, "创建任务：" + str(b, "title"));
         }
         case "itemStatus" -> {
@@ -832,9 +1042,14 @@ public class PlatformService {
                 "fileId", attachments.isEmpty() ? "" : attachments.get(0).asText(), "fileIds", attachments,
                 "replyToId", str(b, "replyToId"), "time", now()));
             Set<String> mentioned = new HashSet<>();
-            for (JsonNode person : list("users"))
-                if (canProject(person, p) && str(b, "text").contains("@" + str(person, "name")) && !str(person, "id").equals(uid))
-                    mentioned.add(str(person, "id"));
+            JsonNode selected = b.path("mentionIds");
+            require(selected.isMissingNode() || selected.isArray() && selected.size() <= 100, "提及成员列表无效");
+            for (JsonNode person : list("users")) {
+                String recipient = str(person, "id");
+                if (recipient.equals(uid) || role(person).equals("admin") || !person.path("enabled").asBoolean()) continue;
+                if (selected.isArray() && !contains(selected, recipient)) continue;
+                if (canProject(person, p) && str(b, "text").contains("@" + str(person, "name"))) mentioned.add(recipient);
+            }
             for (String recipient : mentioned)
                 notice(recipient, str(u, "name") + " 在项目讨论中提及你", str(b, "text"),
                     "/" + role(find("users", recipient)) + "/discussions/" + pid);
@@ -844,20 +1059,25 @@ public class PlatformService {
             ObjectNode p = project(u, pid);
             editable(u, p);
             only(u, "student");
+            ObjectNode task = find("tasks", str(p, "taskId"));
+            require(TaskSchedule.started(task), "任务尚未开始");
+            if (exercise(task)) require(enrolled(uid, str(task, "classId")), "学生已不在该教学班");
             text(b, "description", "milestoneId");
             JsonNode phase = null;
-            for (JsonNode m : find("tasks", str(p, "taskId")).path("milestones"))
+            for (JsonNode m : phases(p))
                 if (str(m, "id").equals(str(b, "milestoneId"))) phase = m;
             require(phase != null, "阶段不存在");
             if (!submissionMode(phase).equals("individual")) leader(u, p);
             require(phase.path("requiresSubmission").asBoolean(true), "该阶段无需提交");
             require(!phase.path("isFinal").asBoolean(), "最终验收请通过最终成果入口提交贡献比例");
             require(List.of("进行中", "结项待修改").contains(str(p, "status")), "审核期间不能修改阶段提交");
-            submissionFiles(p, b.path("fileIds"), phase.path("requireMaterials").asBoolean(true));
+            submissionFiles(p, b.path("fileIds"), TaskSchedule.scheduled(task) || phase.path("requireMaterials").asBoolean(true));
             checkDeliverables(p, phase, b);
             JsonNode latest = latestSubmission(p, phase, uid);
             require(latest == null || !str(latest, "status").equals("已通过"), "当前阶段已通过");
-            require(latest != null && str(latest, "status").equals("退回修改") || str(phase, "due").compareTo(LocalDate.now(ZoneId.of("Asia/Shanghai")).toString()) >= 0, "任务已截止，不能修改提交；教师退回后可重新提交");
+            require(TaskSchedule.beforeDeadline(str(phase, "due"))
+                || !TaskSchedule.scheduled(task) && latest != null && str(latest, "status").equals("退回修改"),
+                "任务已截止，无法提交");
             require(latest == null || str(latest, "id").equals(str(b, "baseSubmissionId")), "提交版本已变化，请刷新后核对最新材料");
             if (latest != null && str(latest, "status").equals("待验收")) ((ObjectNode) latest).put("status", "已更新");
             ((ArrayNode) p.get("submissions")).add(o("id", id(), "milestoneId", str(b, "milestoneId"),
@@ -876,7 +1096,7 @@ public class PlatformService {
             ObjectNode sub = nested(p, "submissions", str(b, "submissionId"));
             require(str(sub, "status").equals("待验收"), "该提交已验收");
             JsonNode phase = null;
-            for (JsonNode m : find("tasks", str(p, "taskId")).path("milestones")) if (str(m, "id").equals(str(sub, "milestoneId"))) phase = m;
+            for (JsonNode m : phases(p)) if (str(m, "id").equals(str(sub, "milestoneId"))) phase = m;
             require(phase != null, "该任务已删除，历史提交保留但不再批改");
             JsonNode current = latestSubmission(p, phase, str(sub, "submitterId"));
             require(current != null && str(current, "id").equals(str(sub, "id")), "当前提交已过期，请查看最新版本");
@@ -894,7 +1114,7 @@ public class PlatformService {
             sub.put("comment", str(b, "comment"));
             sub.put("reviewerId", uid);
             sub.put("reviewTime", now());
-            if(b.path("pass").asBoolean() && find("tasks",str(p,"taskId")).path("taskKind").asText().equals("exercise"))p.put("status","已归档");
+            if (b.path("pass").asBoolean() && exercise(find("tasks", str(p, "taskId")))) p.put("status", "已归档");
             activity(p, u, "阶段验收：" + str(sub, "status"));
             notifyMembers(p, "阶段成果" + str(sub, "status"), str(b, "comment"));
         }
@@ -915,7 +1135,10 @@ public class PlatformService {
             only(u, "student");
             leader(u, p);
             require(List.of("进行中", "结项待修改", "结项待审核").contains(str(p, "status")), "当前无法重复提交结项");
-            for (JsonNode m : find("tasks", str(p, "taskId")).path("milestones")) {
+            ObjectNode task = find("tasks", str(p, "taskId"));
+            require(!exercise(task), "班级任务通过作答提交");
+            require(TaskSchedule.started(task), "课程项目尚未开始");
+            for (JsonNode m : phases(p)) {
                 if (m.path("isFinal").asBoolean() || !m.path("requiresSubmission").asBoolean(true)) continue;
                 for (JsonNode member : p.path("memberIds")) {
                     JsonNode latest = latestSubmission(p, m, member.asText());
@@ -923,9 +1146,10 @@ public class PlatformService {
                 }
             }
             boolean finalPublished = false;
-            for (JsonNode m : find("tasks", str(p, "taskId")).path("milestones")) if (m.path("isFinal").asBoolean()) {
+            for (JsonNode m : phases(p)) if (m.path("isFinal").asBoolean()) {
                 finalPublished = true;
-                require(str(p,"status").equals("结项待修改") || str(m,"due").compareTo(LocalDate.now(ZoneId.of("Asia/Shanghai")).toString()) >= 0, "任务已截止，不能修改提交；教师退回后可重新提交");
+                require(TaskSchedule.beforeDeadline(str(m, "due"))
+                    || !TaskSchedule.scheduled(task) && str(p, "status").equals("结项待修改"), "任务已截止，无法提交");
             }
             require(finalPublished, "教师尚未发布项目验收任务");
             ObjectNode f = ((ObjectNode) b.path("final")).deepCopy();
@@ -958,7 +1182,7 @@ public class PlatformService {
                     if (grading.has(k)) merged.set(k, grading.get(k));
                 if (mysql) merged.remove(List.of("expertName","expertOrg","expertScore","expertComment"));
                 JsonNode phase = null;
-                for(JsonNode m:find("tasks",str(p,"taskId")).path("milestones")) if(m.path("isFinal").asBoolean())phase=m;
+                for (JsonNode m : phases(p)) if (m.path("isFinal").asBoolean()) phase=m;
                 require(phase!=null,"项目验收任务已删除");
                 if(b.has("grading")) {
                     ObjectNode calculated=calculateReview(phase,b.path("grading"),u);
@@ -1157,7 +1381,8 @@ public class PlatformService {
     public synchronized ObjectNode portfolio(String uid) {
         only(user(uid), "student");
         ObjectNode v = view(uid);
-        return o("projects", v.get("projects"), "history", v.get("history"));
+        return o("projects", filtered((ArrayNode) v.get("projects"), p -> !exercise(findOrNull("tasks", str(p, "taskId")))),
+            "history", v.get("history"));
     }
 
     ObjectNode accessibleClass(String uid, String cid) {
@@ -1215,7 +1440,7 @@ public class PlatformService {
             ObjectNode file = nested(p, "files", fid.asText());
             images.add(o("id", str(file, "id"), "name", str(file, "name")));
         }
-        return o("name", str(p, "name"), "description", str(p, "description"), "goal", str(p, "goal"),
+        return o("name", str(p, "name"), "description", str(p, "description"),
             "tags", str(p, "tags"), "created", str(p, "created"), "status", str(p, "status"),
             "course", str(find("courses", str(t, "courseId")), "name"),
             "teachingClass", str(find("teachingClasses", str(t, "classId")), "name"),

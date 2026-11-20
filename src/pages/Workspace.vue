@@ -7,7 +7,8 @@ import {useStore} from '../store'
 
 import {run, confirmAction, printPage} from '../lib'
 import {taskPath, classPath, classSection, isReviewKind} from '../teacher'
-import {phaseStatus,pendingTaskCount} from '../projectPresentation'
+import {beforeDeadline} from '../taskMode'
+import {phaseStatus,pendingTaskCount,projectPhases} from '../projectPresentation'
 import ProjectScores from '../components/ProjectScores.vue'
 import {ElMessage} from 'element-plus'
 import ProjectDecisionBar from '../components/ProjectDecisionBar.vue'
@@ -20,6 +21,9 @@ import TeacherContext from '../components/TeacherContext.vue'
 import OverviewPanel from '../components/workspace/OverviewPanel.vue'
 import BoardPanel from '../components/workspace/BoardPanel.vue'
 import ActivityPanel from '../components/workspace/ActivityPanel.vue'
+import ProjectTopics from '../components/ProjectTopics.vue'
+import StagePublisher from '../components/StagePublisher.vue'
+import TeamTaskPublisher from '../components/TeamTaskPublisher.vue'
 
 const store = useStore()
 const route = useRoute()
@@ -80,38 +84,46 @@ const pending=computed(()=>p.value?pendingTaskCount(s.value,p.value,teacher.valu
 const shareOpen = ref(route.query.tab === 'share')
 // —— 项目编辑弹窗 ——
 const editing = ref(false)
-const edit = reactive({name: '', description: '', goal: '', tags: '', memberIds: [] as string[]})
+const edit = reactive({name: '', description: '', tags: ''})
 const task = computed(() => s.value.tasks.find(t => t.id === p.value?.taskId))
+const canPublishPhases = computed(() => teacher.value && task.value?.taskKind !== 'exercise'
+  && ['进行中', '结项待修改'].includes(p.value?.status || '')
+  && (!store.user?.permissions || store.user.permissions.includes('tasks')))
 const boardFilter=ref('待完成')
-const boardMilestones=computed(()=>task.value?.milestones.filter(m=>{
-  if(!p.value || m.requiresSubmission===false && !m.isFinal)return false
+const boardMilestones=computed(()=>projectPhases(task.value,p.value).filter(m=>{
+  if(!p.value)return false
   const status=phaseStatus(p.value,m,viewer.value)
   if(boardFilter.value==='全部')return true
   if(boardFilter.value==='已完成')return status==='已通过'
-  if(boardFilter.value==='已过期')return ['未提交','退回修改'].includes(status) && m.due<new Date().toLocaleDateString('sv-SE')
+  if(boardFilter.value==='已过期')return ['未提交','退回修改'].includes(status) && !beforeDeadline(m.due)
   return status!=='已通过'
-}) || [])
-const eligibleMembers = computed(() =>
-  s.value.users.filter(u =>
-    u.role === 'student' && u.enabled
-    && (task.value?.crossClass || s.value.enrollments.some(e => e.studentId === u.id && e.classId === task.value?.classId))))
+}))
+
+function openPhase(id: string) {
+  if (!p.value || !task.value) return
+  if (teacher.value) router.push({
+    path: taskPath(task.value.classId,task.value.id) + '/milestones/' + id,
+    query: {project: p.value.id},
+  })
+  else router.push(`/student/projects/${p.value.id}/submit/${id}`)
+}
 
 function openEdit() {
   if (p.value) Object.assign(edit, {
-    name: p.value.name, description: p.value.description, goal: p.value.goal,
-    tags: p.value.tags, memberIds: [...p.value.memberIds],
+    name: p.value.name, description: p.value.description,
+    tags: p.value.tags,
   })
   editing.value = true
 }
 async function saveEdit() {
-  if (!edit.name.trim() || !edit.description.trim() || !edit.goal.trim()) {
-    ElMessage.warning('项目名称、简介与目标为必填项')
+  if (!edit.name.trim() || !edit.description.trim()) {
+    ElMessage.warning('请填写项目名称和简介')
     return
   }
   await run(async () => {
     await store.act('editProject', {projectId: p.value!.id, ...edit})
     editing.value = false
-  }, teacher.value ? '项目信息已更新' : '申请已重新提交')
+  }, '申请已重新提交')
 }
 </script>
 <template>
@@ -121,7 +133,7 @@ async function saveEdit() {
     <PageHead :title="p.name">
       <el-button @click="router.push(backLink)"><ArrowLeft :size="16" />返回列表</el-button>
 
-      <el-button v-if="(teacher && !['已归档', '已关闭'].includes(p.status)) || (leader && p.status === '待修改')" @click="openEdit">{{teacher ? '编辑项目' : '修改申请'}}</el-button>
+      <el-button v-if="leader && p.status === '待修改'" @click="openEdit">修改申请</el-button>
       <el-button v-if="teacher && p.status === '已归档'" type="primary" @click="confirmAction('项目将移出归档并恢复编辑。', () => store.act('reopen', {projectId: p!.id}))">移出归档</el-button>
       <el-button @click="printPage('project', p.id)"><Download :size="16" />项目介绍 PDF</el-button>
       <el-button @click="setTab('share')"><Share2 :size="16" />项目分享</el-button>
@@ -139,16 +151,21 @@ async function saveEdit() {
         : '项目已关闭。'}}
       <span v-if="p.reviewComment"> 教师意见：{{p.reviewComment}}</span>
     </div>
-    <section class="section project-persistent-description"><h2>项目说明</h2><p class="pre-wrap">{{p.description}}</p><p class="pre-wrap"><strong>项目目标：</strong>{{p.goal}}</p><el-collapse v-if="task"><el-collapse-item title="课程任务说明"><p class="pre-wrap">{{task.description}}</p><ProjectScores :project="p" :task="task" /></el-collapse-item></el-collapse></section>
+    <section class="section project-persistent-description"><h2>项目说明</h2><p class="pre-wrap">{{p.description}}</p><el-collapse v-if="task"><el-collapse-item title="课程任务说明"><p class="pre-wrap">{{task.description}}</p><ProjectScores :project="p" :task="task" /></el-collapse-item></el-collapse></section>
     <el-tabs :model-value="tab" class="workspace-tabs" @tab-change="(name: unknown) => setTab(String(name))">
       <el-tab-pane v-for="t in tabs" :key="t.id" :name="t.id"><template #label>{{t.name}}<span v-if="t.id==='board' && pending" class="pending-count">{{pending}}</span></template></el-tab-pane>
     </el-tabs>
     <div>
       <OverviewPanel v-if="tab === 'overview'" :project="p" @goto="setTab" />
-      <div v-else-if="tab === 'board'" class="project-board-layout">
-        <BoardPanel v-model:filter="boardFilter" :project="p" :readonly="readonly" />
-        <section class="section board-milestones"><h2>课程任务</h2><div v-for="m in boardMilestones" :key="m.id" class="board-milestone"><strong>{{m.name}}</strong><small class="muted">截止 {{m.due}}</small><div class="actions"><Status :value="phaseStatus(p,m,viewer)" /><el-button size="small" :type="phaseStatus(p,m,viewer)==='未提交'?'primary':'default'" @click="router.push(teacher ? taskPath(task!.classId,task!.id)+'/milestones/'+m.id : `/student/projects/${p.id}/submit/${m.id}`)">{{teacher?'提交批改':'查看 / 提交'}}</el-button></div></div><el-empty v-if="!boardMilestones.length" description="当前分类暂无课程任务" :image-size="48" /></section>
-      </div>
+      <template v-else-if="tab === 'board'">
+        <section v-if="canPublishPhases && task" class="section"><StagePublisher :task="task" :project="p" /></section>
+        <div class="project-board-layout">
+        <BoardPanel v-model:filter="boardFilter" :project="p" :readonly="readonly">
+          <template #actions><TeamTaskPublisher v-if="canPublishPhases" :project="p" /></template>
+        </BoardPanel>
+        <section class="section board-milestones"><h2>项目子任务与验收</h2><div v-for="m in boardMilestones" :key="m.id" class="board-milestone"><strong>{{m.name}}</strong><small class="muted">{{m.isFinal?'最终成果验收':p.milestones?.some(item=>item.id===m.id)?'本项目子任务':'课程项目共用阶段'}} · 截止 {{m.due}}</small><div class="actions"><Status :value="phaseStatus(p,m,viewer)" /><el-button v-if="teacher || viewer" size="small" :type="phaseStatus(p,m,viewer)==='未提交'?'primary':'default'" @click="openPhase(m.id)">{{m.requiresSubmission===false?'查看':teacher?'提交批改':'查看 / 提交'}}</el-button></div></div><el-empty v-if="!boardMilestones.length" description="当前分类暂无任务" :image-size="48" /></section>
+        </div>
+      </template>
       <FileLibrary v-else-if="tab === 'files'" :project="p" :readonly="readonly" />
       <section v-else-if="tab === 'members'"><Members :project="p" :readonly="readonly" /><ActivityPanel :project="p" /></section>
     </div>
@@ -156,18 +173,11 @@ async function saveEdit() {
 
     <el-dialog v-model="shareOpen" title="项目分享" width="min(800px, 95vw)"><SharePanel :project="p" /></el-dialog>
     <ProjectDecisionBar v-if="teacher && (inApplicationReview || p.status==='待审核')" :project="p" />
-    <el-dialog v-model="editing" :title="teacher ? '编辑项目' : '修改项目申请'" width="640px">
+    <el-dialog v-model="editing" title="修改项目申请" width="min(640px,94vw)">
       <el-form label-position="top">
         <el-form-item label="项目名称" required><el-input v-model="edit.name" /></el-form-item>
         <el-form-item label="项目简介" required><el-input v-model="edit.description" type="textarea" :rows="3" /></el-form-item>
-        <el-form-item label="项目目标" required><el-input v-model="edit.goal" type="textarea" :rows="3" /></el-form-item>
-        <el-form-item label="技术标签"><el-input v-model="edit.tags" /></el-form-item>
-        <el-form-item label="正式成员名单">
-          <el-select v-model="edit.memberIds" multiple filterable :disabled="!teacher">
-            <el-option v-for="u in eligibleMembers" :key="u.id" :value="u.id" :label="u.name" :disabled="u.id === p.leaderId" />
-          </el-select>
-        </el-form-item>
-        <p v-if="teacher" class="muted">调整成员会使结项材料失效，团队需重新确认贡献并提交。</p>
+        <el-form-item label="技术与主题"><ProjectTopics v-model="edit.tags" /></el-form-item>
       </el-form>
       <template #footer>
         <el-button @click="editing = false">取消</el-button>

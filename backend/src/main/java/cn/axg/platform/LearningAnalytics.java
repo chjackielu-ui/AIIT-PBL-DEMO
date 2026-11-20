@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.node.*;
 import java.util.*;
 import static cn.axg.platform.Seed.*;
 import static cn.axg.platform.PlatformService.str;
+import static cn.axg.platform.PlatformService.projectPhases;
 
 /** 用真实提交和教师评分计算，仅向学生返回本人指标和匿名班级平均。 */
 final class LearningAnalytics {
@@ -18,7 +19,7 @@ final class LearningAnalytics {
    ObjectNode project=null;
    for(JsonNode p:s.list("projects"))if(str(p,"taskId").equals(str(task,"id")) && s.contains(p.path("memberIds"),uid) && !str(p,"status").equals("已关闭"))project=(ObjectNode)p;
    if(project!=null)for(JsonNode file:project.path("files"))if(str(file,"userId").equals(uid))uploads++;
-   for(JsonNode phase:task.path("milestones")){
+   for(JsonNode phase:projectPhases(task,project)){
     if(!phase.path("isFinal").asBoolean() && !phase.path("requiresSubmission").asBoolean(true))continue;
     required++;if(project==null)continue;
     JsonNode record;boolean accepted;String time;JsonNode score;
@@ -31,8 +32,8 @@ final class LearningAnalytics {
     if(record==null || record.isMissingNode() || record.isNull())continue;
     submitted++;
     if(accepted){passed++;if(score!=null && score.isNumber()){scores+=score.asDouble();scored++;}}
-    // 有效时间不足时不推测；按最近提交版本是否在截止日之前计算。
-    if(time.length()>=10 && str(phase,"due").matches("\\d{4}-\\d{2}-\\d{2}")){timed++;if(time.substring(0,10).compareTo(str(phase,"due"))<=0)onTime++;}
+    Boolean timely = TaskSchedule.onTime(time, str(phase, "due"));
+    if (timely != null) { timed++; if (timely) onTime++; }
    }
   }
   ObjectNode out=o("required",required,"submitted",submitted,"passed",passed,"scored",scored,"timed",timed,"onTime",onTime,"uploads",uploads);

@@ -4,7 +4,7 @@ import {Search, Plus} from 'lucide-vue-next'
 import {useStore} from '../store'
 
 import {taskModeName} from '../taskMode'
-import {latestTerm} from '../academic'
+import {latestTerm, semesters} from '../academic'
 import {teachingClasses, taskPath, classPath, intentPath} from '../teacher'
 import PageHead from '../components/PageHead.vue'
 import Status from '../components/Status.vue'
@@ -49,15 +49,15 @@ function clear() {
 </script>
 <template>
   <PageHead title="实训任务总表">
-    <el-button type="primary" @click="$router.push(intentPath('publish'))"><Plus :size="16" />发布设计任务</el-button>
+    <el-button type="primary" @click="$router.push(intentPath('publish'))"><Plus :size="16" />发布教学任务</el-button>
   </PageHead>
   <div class="toolbar">
     <el-select v-model="year" aria-label="学年">
       <el-option v-for="y in [...new Set(classes.map(c => c.academicYear))].sort().reverse()" :key="y" :value="y" />
     </el-select>
     <el-select v-model="semester" aria-label="学期">
-      <el-option value="第一学期" />
-      <el-option value="第二学期" />
+      <el-option v-for="term in semesters" :key="term" :value="term" />
+
     </el-select>
     <el-input v-model="query" clearable placeholder="搜索设计任务">
       <template #prefix><Search :size="16" /></template>
@@ -74,10 +74,10 @@ function clear() {
     <span class="muted">共 {{rows.length}} 项</span>
   </div>
   <el-table :data="rows" class="task-register-table">
-    <el-table-column label="设计任务" min-width="250">
+    <el-table-column label="发布内容" min-width="250">
       <template #default="{row: t}">
         <RouterLink :to="taskPath(t.classId, t.id)" class="strong">{{t.name}}</RouterLink>
-        <div class="table-sub">{{taskModeName(t)}} · {{t.milestones.length}} 个阶段</div>
+        <div class="table-sub">{{taskModeName(t)}}<template v-if="t.taskKind!=='exercise'"> · {{t.milestones.length}} 个阶段</template></div>
       </template>
     </el-table-column>
     <el-table-column label="教学班级 / 关联课程" min-width="240">
@@ -89,11 +89,12 @@ function clear() {
     <el-table-column label="状态" width="110">
       <template #default="{row: t}"><Status :value="t.status" /></template>
     </el-table-column>
-    <el-table-column prop="due" label="申请截止" width="120" />
-    <el-table-column label="任务项目" min-width="150">
+    <el-table-column prop="due" label="截止日期" width="120" />
+    <el-table-column label="作答 / 申请" min-width="150">
       <template #default="{row: t}">
-        <RouterLink :to="classPath(t.classId) + '/projects?taskId=' + t.id">{{projects(t.id).length}} 个项目</RouterLink>
-        <div class="table-sub">{{projects(t.id).filter(p => p.status === '待审核').length}} 个申请待审</div>
+        <span v-if="t.taskKind==='exercise'">{{projects(t.id).filter(p=>p.submissions.length).length}} 人已作答</span>
+        <RouterLink v-else :to="classPath(t.classId) + '/projects?taskId=' + t.id">{{projects(t.id).length}} 个项目</RouterLink>
+        <div v-if="t.taskKind!=='exercise'" class="table-sub">{{projects(t.id).filter(p => p.status === '待审核').length}} 个申请待审</div>
       </template>
     </el-table-column>
     <el-table-column label="操作" width="160" fixed="right" align="right">

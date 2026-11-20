@@ -7,6 +7,7 @@ import {useStore} from '../store'
 import {roleName, run} from '../lib'
 import {validOrigin} from '../navigation'
 import {pendingSubmissionCount} from '../projectPresentation'
+import AccountAvatar from './AccountAvatar.vue'
 
 
 const store = useStore()
@@ -62,7 +63,7 @@ function active(item: MenuItem) {
   return item.match ? item.match(route.path) : route.path === item.path
 }
 
-const currentArea = computed(() => menuGroups.value.flatMap(group => group.items).find(active)?.name)
+const currentArea = computed(() => route.path === '/profile' ? '个人主页' : menuGroups.value.flatMap(group => group.items).find(active)?.name)
 </script>
 <template>
   <div v-if="store.user" class="app-shell" :class="{collapsed,'discussion-mode':route.path.includes('/discussions')}">
@@ -83,6 +84,11 @@ const currentArea = computed(() => menuGroups.value.flatMap(group => group.items
           </RouterLink>
         </div>
       </nav>
+      <RouterLink v-if="store.user.role !== 'admin'" to="/profile" class="sidebar-account" aria-label="我的个人主页" title="个人主页">
+        <AccountAvatar :user="store.user" :size="32" />
+        <span v-if="!collapsed" class="sidebar-account-text"><strong>{{store.user.name}}</strong><small>{{roleName[store.user.role]}}</small></span>
+        <ChevronRight v-if="!collapsed" class="sidebar-account-arrow" :size="15" aria-hidden="true" />
+      </RouterLink>
       <button class="nav-toggle" :aria-label="collapsed?'展开导航':'收起导航'" :aria-expanded="!collapsed" @click="toggleSidebar">
         <component :is="collapsed ? PanelLeftOpen : PanelLeftClose" :size="17" aria-hidden="true" />
         <span v-if="!collapsed">收起导航</span>
@@ -98,13 +104,12 @@ const currentArea = computed(() => menuGroups.value.flatMap(group => group.items
           <RouterLink to="/notifications" class="icon-button" aria-label="通知中心">
             <Bell :size="20" /><span v-if="unread" class="dot" />
           </RouterLink>
-          <span class="avatar">{{store.user.name.slice(0, 1)}}</span>
           <el-dropdown>
-            <button class="user-button">{{store.user.name}}<span class="muted">{{roleName[store.user.role]}}</span></button>
+            <button class="user-button"><AccountAvatar :user="store.user" :size="30" />{{store.user.name}}<span class="muted">{{roleName[store.user.role]}}</span></button>
             <template #dropdown>
               <el-dropdown-menu>
-                <el-dropdown-item @click="router.push('/profile/settings')">当前用户信息</el-dropdown-item>
-                <el-dropdown-item divided @click="run(async () => {await store.logout(); await router.push('/login')}, '已退出')">
+                <el-dropdown-item @click="router.push('/profile')">个人主页</el-dropdown-item>
+                <el-dropdown-item divided @click="run(async () => {await store.logout(); await router.replace('/login')}, '已退出')">
                   <LogOut :size="16" />退出登录
                 </el-dropdown-item>
               </el-dropdown-menu>
@@ -117,3 +122,17 @@ const currentArea = computed(() => menuGroups.value.flatMap(group => group.items
     </div>
   </div>
 </template>
+
+<style scoped>
+.sidebar-account {display:flex; flex:none; align-items:center; gap:9px; padding:8px; margin:0 0 6px; color:#465263; border:1px solid transparent; border-radius:6px}
+.sidebar-account:hover, .sidebar-account.router-link-active {background:white; border-color:#d5dce6; color:#223d64}
+.sidebar-account-text {display:grid; flex:1; min-width:0; font-size:13px}
+.sidebar-account-text strong {overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+.sidebar-account-text small {font-size:11px; color:var(--muted)}
+.sidebar-account-arrow {flex:none}
+.collapsed .sidebar-account {justify-content:center; padding-inline:0}
+@media (max-width:760px) {
+  .sidebar-account {justify-content:center; padding-inline:0}
+  .sidebar-account-text, .sidebar-account-arrow {display:none}
+}
+</style>

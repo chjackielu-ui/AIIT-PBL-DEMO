@@ -29,7 +29,7 @@ final class CourseGrading {
  }
  static double projectScore(PlatformService s,JsonNode task,ObjectNode p,String uid) {
   double total=0,weight=0;
-  for(JsonNode phase:task.path("milestones")){
+  for(JsonNode phase:projectPhases(task,p)){
    if(!phase.path("isFinal").asBoolean() && !phase.path("requiresSubmission").asBoolean(true))continue;
    double w=phase.path("scoreWeight").asDouble(1),score=0;weight+=w;
    if(phase.path("isFinal").asBoolean()){
@@ -44,7 +44,7 @@ final class CourseGrading {
   for(JsonNode task:s.list("tasks"))if(str(task,"classId").equals(cid) && !str(task,"status").equals("草稿")){
    count++;
    for(JsonNode p:s.list("projects"))if(str(p,"taskId").equals(str(task,"id")) && s.contains(p.path("memberIds"),uid) && !List.of("待审核","待修改","已关闭").contains(str(p,"status"))){
-    for (JsonNode phase : task.path("milestones")) {
+    for (JsonNode phase : projectPhases(task,p)) {
      if (phase.path("isFinal").asBoolean()) {
       if (p.path("final").path("approved").asBoolean() && p.path("final").path("contributions").valueStream()
           .anyMatch(c -> str(c,"userId").equals(uid) && c.path("score").isNumber())) scored=true;

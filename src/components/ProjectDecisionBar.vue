@@ -19,5 +19,5 @@ async function decide(pass:boolean){
  busy.value=false
 }
 </script>
-<template><div class="review-decision-bar" :class="{'inline-decision':inline}"><span>{{project.name}}</span><el-button type="success" :loading="busy" :disabled="project.status!=='待审核'" @click="decide(true)">通过</el-button><el-button type="danger" :loading="busy" :disabled="project.status!=='待审核'" @click="decide(false)">打回</el-button></div></template>
+<template><div class="review-decision-bar" :class="{'inline-decision':inline}"><span>{{project.name}}</span><el-button type="primary" :loading="busy" :disabled="project.status!=='待审核'" @click="decide(true)">通过</el-button><el-button type="danger" :loading="busy" :disabled="project.status!=='待审核'" @click="decide(false)">打回</el-button></div></template>
 <style scoped>.review-decision-bar.inline-decision{position:static;box-shadow:none;margin-top:18px;justify-content:flex-end;padding:12px 0 0;border:0;border-top:1px solid var(--line);background:transparent;flex-wrap:wrap}</style>

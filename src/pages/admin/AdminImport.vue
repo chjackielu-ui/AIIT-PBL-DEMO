@@ -64,8 +64,7 @@ const semester = ref(term.semester)
 const currentRows = computed<DataRow[]>(() => {
   if (selectedTab.value === 'teachingClasses') {
     return (s.value.teachingClasses
-      .filter(c => c.academicYear === year.value && c.semester === semester.value)
-      .sort((a, b) => b.academicYear.localeCompare(a.academicYear) || (b.semester === '第二学期' ? 1 : 0) - (a.semester === '第二学期' ? 1 : 0))) as unknown as DataRow[]
+      .filter(c => c.academicYear === year.value && c.semester === semester.value)) as unknown as DataRow[]
   }
   return s.value[selectedTab.value] as unknown as DataRow[]
 })

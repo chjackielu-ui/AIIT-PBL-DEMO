@@ -7,9 +7,9 @@ import TermFilter from '../components/TermFilter.vue'
 import PageHead from '../components/PageHead.vue'
 import IdentityCard from '../components/IdentityCard.vue'
 import ProjectGrid from '../components/ProjectGrid.vue'
-import {taskModeName} from '../taskMode'
-import {localDate} from '../lib'
-import {phaseStatus} from '../projectPresentation'
+import {taskModeName,canStartTask,beforeDeadline} from '../taskMode'
+import {stamp} from '../lib'
+import {phaseStatus,projectPhases} from '../projectPresentation'
 import NotificationList from '../components/NotificationList.vue'
 
 const store = useStore()
@@ -24,10 +24,11 @@ const semester = ref(term.semester)
 const classes = computed(() =>
   relevantClasses(s.value).filter(c => c.academicYear === year.value && c.semester === semester.value))
 const tasks = computed(() => s.value.tasks.filter(t => classes.value.some(c => c.id === t.classId)))
-const projects = computed(() => s.value.projects.filter(p => tasks.value.some(t => t.id === p.taskId)))
+const records = computed(() => s.value.projects.filter(p => tasks.value.some(t => t.id === p.taskId)))
+const projects = computed(() => records.value.filter(p => tasks.value.find(t => t.id === p.taskId)?.taskKind !== 'exercise'))
 
-const availableTasks=computed(()=>tasks.value.filter(t=>t.status==='已发布' && localDate()<=t.teamDue && localDate()<=t.due && !projects.value.some(p=>p.taskId===t.id && p.memberIds.includes(store.user!.id))))
-const pendingTasks=computed(()=>projects.value.filter(p=>p.memberIds.includes(store.user!.id) && !['待审核','待修改','已关闭','已归档'].includes(p.status)).flatMap(p=>(tasks.value.find(t=>t.id===p.taskId)?.milestones || []).filter(m=>m.requiresSubmission!==false || m.isFinal).map(m=>({p,m,status:phaseStatus(p,m,store.user?.id)}))).filter(r=>['未提交','退回修改'].includes(r.status)).sort((a,b)=>a.m.due.localeCompare(b.m.due)))
+const availableTasks=computed(()=>tasks.value.filter(t=>canStartTask(t) && !records.value.some(p=>p.taskId===t.id && p.memberIds.includes(store.user!.id))))
+const pendingTasks=computed(()=>records.value.filter(p=>p.memberIds.includes(store.user!.id) && !['待审核','待修改','已关闭','已归档'].includes(p.status)).flatMap(p=>projectPhases(tasks.value.find(t=>t.id===p.taskId),p).filter(m=>m.requiresSubmission!==false || m.isFinal).map(m=>({p,m,status:phaseStatus(p,m,store.user?.id)}))).filter(r=>['未提交','退回修改'].includes(r.status)).sort((a,b)=>a.m.due.localeCompare(b.m.due)))
 </script>
 <template>
   <PageHead :title="role === 'admin' ? '管理员工作台' : '学生工作台'">
@@ -45,16 +46,16 @@ const pendingTasks=computed(()=>projects.value.filter(p=>p.memberIds.includes(st
     </template>
   </IdentityCard>
   
-  <section v-if="role==='student' && !projects.length" class="section cold-start"><div class="section-head"><h2>从实训任务创建第一个项目</h2><RouterLink to="/student/tasks">可参与的任务 →</RouterLink></div><article v-for="t in availableTasks.slice(0,4)" :key="t.id" class="home-pending-row"><div><strong>{{t.name}}</strong><small class="muted">{{taskModeName(t)}} · 未创建</small></div><el-button type="primary" @click="$router.push(t.taskKind==='exercise'?'/student/tasks/'+t.id:'/student/projects/create/'+t.id)">{{t.taskKind==='exercise'?'开始练习':'创建项目'}}</el-button></article><el-empty v-if="!availableTasks.length" :description="!classes.length?'尚未加入教学班，请任课教师添加选课关系':'暂无可创建的实训任务，请等待教师发布或查看全部任务'" :image-size="48"><el-button @click="$router.push('/student/tasks')">查看可参与的任务</el-button></el-empty></section>
+  <section v-if="role==='student' && availableTasks.length" class="section cold-start"><div class="section-head"><h2>待开始的班级任务与课程项目</h2><RouterLink to="/student/tasks">可参与的任务 →</RouterLink></div><article v-for="t in availableTasks.slice(0,4)" :key="t.id" class="home-pending-row"><div><strong>{{t.name}}</strong><small class="muted">{{taskModeName(t)}}</small></div><el-button type="primary" @click="$router.push(t.taskKind==='exercise'?'/student/tasks/'+t.id:'/student/projects/create/'+t.id)">{{t.taskKind==='exercise'?'开始作答':'申请项目'}}</el-button></article></section>
   <div :class="{'student-home-columns':role==='student'}">
   <section class="section">
     <div class="section-head">
-      <h2>{{role === 'student' ? '团队组队' : '最近项目'}}</h2>
+      <h2>{{role === 'student' ? '我的课程项目' : '最近项目'}}</h2>
       <RouterLink :to="`/${role}/projects`">查看全部</RouterLink>
     </div>
     <ProjectGrid :projects="[...projects].sort((a, b) => b.created.localeCompare(a.created)).slice(0, 8)" />
   </section>
-  <section v-if="role==='student'" class="section"><div class="section-head"><h2>待完成的任务</h2><RouterLink to="/student/submissions">查看全部</RouterLink></div><article v-for="r in pendingTasks.slice(0,6)" :key="r.p.id+r.m.id" class="home-pending-row"><span class="task-state-dot" :class="{overdue:r.m.due<new Date().toLocaleDateString('sv-SE')}" /><div><strong>{{r.m.name}}</strong><small class="muted">{{r.p.name}} · 截止 {{r.m.due}}</small></div><el-button type="primary" plain @click="$router.push(`/student/projects/${r.p.id}/submit/${r.m.id}`)">{{r.status==='退回修改'?'修改并提交':'查看 / 提交'}}</el-button></article><el-empty v-if="!pendingTasks.length" description="暂无待完成的任务" :image-size="48" /></section>
+  <section v-if="role==='student'" class="section"><div class="section-head"><h2>待完成的任务</h2><RouterLink to="/student/submissions">查看全部</RouterLink></div><article v-for="r in pendingTasks.slice(0,6)" :key="r.p.id+r.m.id" class="home-pending-row"><span class="task-state-dot" :class="{overdue:!beforeDeadline(r.m.due)}" /><div><strong>{{r.m.name}}</strong><small class="muted">{{r.p.name}} · 截止 {{stamp(r.m.due)}}</small></div><el-button type="primary" plain @click="$router.push(`/student/projects/${r.p.id}/submit/${r.m.id}`)">{{r.status==='退回修改'?'修改并提交':'查看 / 提交'}}</el-button></article><el-empty v-if="!pendingTasks.length" description="暂无待完成的任务" :image-size="48" /></section>
   </div>
   <section class="section">
     <div class="section-head">

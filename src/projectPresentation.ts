@@ -1,8 +1,13 @@
-import type {Contribution, Milestone, Project, State, Submission} from './types'
+import type {Contribution, CourseTask, Milestone, Project, State, Submission} from './types'
+
+export function projectPhases(task?: CourseTask, project?: Project) {
+  const shared = task?.milestones ?? []
+  return [...shared.filter(m => !m.isFinal), ...(project?.milestones ?? []), ...shared.filter(m => m.isFinal)]
+}
 
 /** 阶段验收截止：取任务全部阶段（含最终验收）的最晚截止日期；异常数据回退任务级申请截止。 */
 export function projectDeadline(s:State, p:Project) {
-  return s.tasks.find(t => t.id === p.taskId)?.milestones.map(m => m.due).sort().at(-1)
+  return projectPhases(s.tasks.find(t => t.id === p.taskId), p).map(m => m.due).sort().at(-1)
     || s.tasks.find(t => t.id === p.taskId)?.due
     || '未设置'
 }
@@ -11,7 +16,7 @@ export function projectDeadline(s:State, p:Project) {
  *  最终验收阶段在提交结项（p.final 存在）时计入完成，口径与 README「工作项+阶段验收状态计算」一致。 */
 export function projectProgress(s:State, p:Project) {
   if (p.status === '已归档') return 100
-  const phases = s.tasks.find(t => t.id === p.taskId)?.milestones.filter(m => m.isFinal || m.requiresSubmission !== false) || []
+  const phases = projectPhases(s.tasks.find(t => t.id === p.taskId), p).filter(m => m.isFinal || m.requiresSubmission !== false)
   const accepted = phases.filter(m =>
     m.isFinal
       ? !!p.final
@@ -74,7 +79,7 @@ export function phaseScore(p: Project, m: Milestone, memberId?:string): number |
 /** 需要本人提交或重交的任务数；教师待批材料不计入学生待办。 */
 export function pendingSubmissionCount(s:State,p:Project,userId?:string) {
   if(!['进行中','结项待修改'].includes(p.status))return 0
-  return (s.tasks.find(t=>t.id===p.taskId)?.milestones || []).filter(m=>(m.isFinal || m.requiresSubmission!==false)
+  return projectPhases(s.tasks.find(t=>t.id===p.taskId),p).filter(m=>(m.isFinal || m.requiresSubmission!==false)
     && ['未提交','退回修改'].includes(phaseStatus(p,m,userId))).length
 }
 
@@ -102,7 +107,6 @@ export function projectPresentation(s: State, p: Project) {
   return {
     name: p.name,
     description: p.description,
-    goal: p.goal,
     tags: p.tags,
     created: p.created,
     status: p.status,
@@ -140,7 +144,7 @@ export interface PortfolioRecord {
 /** 个人档案记录：项目经历（职责取 contribution.role、贡献取 description，与成员表的字段语义一致）
  *  与历史补录合并，按日期倒序。档案页与打印页共用。 */
 export function portfolioRecords(s: State, userId: string): PortfolioRecord[] {
-  const projects = s.projects.map(p => {
+  const projects = s.projects.filter(p => s.tasks.find(t => t.id === p.taskId)?.taskKind !== 'exercise').map(p => {
     const c: Contribution | undefined = p.contributions.find(c => c.userId === userId)
     const t = s.tasks.find(t => t.id === p.taskId)
     const tc = s.teachingClasses.find(c => c.id === t?.classId)

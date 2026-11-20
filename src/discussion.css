@@ -65,13 +65,19 @@
 .composer-reply {display:flex;align-items:center;gap:5px;background:#edf2fd;padding:7px 9px;font-size:10px;color:#6a80a7;border-radius:5px 5px 0 0}
 .composer-reply span {overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1}
 .composer-reply button,.pending-files button,.pending-snippet button {display:flex;align-items:center;justify-content:center;border:0;background:transparent;color:inherit;cursor:pointer;padding:0}
-.chat-composer {border:1px solid #d6dfec;border-radius:7px;background:#fff;overflow:hidden;transition:border-color .15s}
+.chat-composer {border:1px solid #d6dfec;border-radius:7px;background:#fff;transition:border-color .15s}
 .chat-composer:focus-within {border-color:#94addf;box-shadow:0 0 0 2px #edf2fc}
-.chat-composer-tools {display:flex;align-items:center;gap:14px;background:#f9fafc;border-bottom:1px solid #edf0f5;padding:9px 11px}
+.chat-composer-tools {display:flex;align-items:center;gap:14px;background:#f9fafc;border-bottom:1px solid #edf0f5;padding:9px 11px;border-radius:7px 7px 0 0}
 .chat-composer-tools button {display:flex;align-items:center;justify-content:center;padding:0;border:0;background:transparent;color:#72839e;cursor:pointer}
 .chat-composer-tools button:hover {color:var(--primary)}
 .chat-composer-tools small {font-size:9px;color:#a0abba;margin-left:auto}
 .chat-composer .el-textarea__inner {border:0;box-shadow:none!important;padding:10px 12px;font-size:12px;background:transparent;line-height:1.7}
+.chat-compose-input {position:relative; min-width:0}
+.chat-mention-picker {position:absolute;z-index:8;bottom:calc(100% + 5px);left:8px;width:min(270px, calc(100% - 16px));max-height:min(200px, 35vh);overflow:auto;padding:5px;background:#fff;border:1px solid var(--line);border-radius:7px;box-shadow:0 6px 20px #20385d24}
+.chat-mention-picker button {width:100%;display:flex;justify-content:space-between;align-items:center;gap:8px;padding:7px 8px;border:0;border-radius:4px;background:transparent;text-align:left;color:var(--text);cursor:pointer}
+.chat-mention-picker button[aria-selected="true"],.chat-mention-picker button:hover {background:#edf4ff;color:var(--primary)}
+.chat-mention-picker button span:first-child {min-width:0;overflow-wrap:anywhere}
+.chat-mention-picker small {display:block;padding:8px}
 .chat-composer-footer {display:flex;align-items:center;justify-content:space-between;padding:7px 10px 10px;gap:8px}
 .chat-composer-footer small {font-size:9px;color:#9aa5b5}
 .chat-composer-footer .el-button {font-size:11px;min-height:29px;padding:6px 12px}
@@ -162,3 +168,11 @@
 .inspector-heading-tools{display:flex;align-items:center;gap:8px}.inspector-pin{display:grid;place-items:center;width:29px;height:29px;border:1px solid #e0e7f1;border-radius:4px;background:#fff;color:#7d8fac;cursor:pointer}.inspector-pin.selected{color:var(--primary);background:#edf4ff;border-color:#b6cdf7}.channel-messages{padding-top:8px}
 .discussion-context-row{display:flex;align-items:center;gap:12px;min-width:0;overflow-x:auto;flex:1;scrollbar-width:thin;padding:4px 0}.discussion-context-row>span,.discussion-context-row h1{flex:none;white-space:nowrap}.discussion-context-row .discussion-course-select{width:190px;flex:none;font-weight:400}.discussion-context-row h1 .el-select{width:240px;flex:none}.project-discussion .chat-channel{flex:1;min-width:0}
 .project-discussion>.collaboration-canvas{flex:1;width:100%;min-width:0}
+.el-overlay.channel-members-overlay {background-color:rgb(26 44 76 / 32%)}
+@media(max-width:700px){
+ .collaboration-heading {align-items:flex-end}
+ .discussion-context-row {display:grid;grid-template-columns:auto minmax(0,1fr);gap:6px;overflow:visible}
+ .discussion-context-row .discussion-course-select,.discussion-context-row h1 .el-select {width:100%;min-width:0}
+ .discussion-context-row h1 {grid-column:1/-1;min-width:0}
+ .discussion-context-row h1>span {display:none}
+}

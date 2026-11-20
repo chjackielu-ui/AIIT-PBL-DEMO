@@ -5,8 +5,8 @@ import hljs from 'highlight.js/lib/common'
 import {ElMessage} from 'element-plus'
 import {useStore} from '../store'
 import {api, request} from '../api'
-import type {Message, Project, ProjectFile} from '../types'
-import {fileDownloadUrl, humanSize, run, stamp} from '../lib'
+import type {Message, Project, ProjectFile, User} from '../types'
+import {fileDownloadUrl, humanSize, roleName, run, stamp} from '../lib'
 import {attachmentIds, codeLanguage, isCodeFile} from '../discussion'
 import CodeWorkbench from './CodeWorkbench.vue'
 
@@ -21,6 +21,9 @@ function showPanel(value:'preview'|'diff'|'files'){mode.value=value;inspectorOpe
 function togglePanel(value:'preview'|'diff'|'files'){inspectorOpen.value=mode.value!==value || !inspectorOpen.value;mode.value=value}
 const store=useStore()
 const text=ref(''), code=ref(''), codeName=ref('snippet.ts'), language=ref('typescript')
+const mentionIds=ref<string[]>([])
+const mention=ref<{start:number;end:number;query:string}>()
+const highlightedMention=ref(0)
 const pendingIds=ref<string[]>([]), replyToId=ref('')
 const codeDialog=ref(false), memberDialog=ref(false)
 const busy=ref(false), uploading=ref(false)
@@ -33,9 +36,9 @@ const composer=ref<{textarea?:HTMLTextAreaElement}>()
 const synced=ref(true), syncing=ref(false)
 const filePreview=ref<ProjectFile>()
 const draftKey=`project-chat-draft:${store.user!.id}:${props.project.id}`
-try {const draft=JSON.parse(sessionStorage.getItem(draftKey) || '{}');text.value=draft.text || '';code.value=draft.code || '';codeName.value=draft.codeName || 'snippet.ts';language.value=draft.language || 'typescript';pendingIds.value=(draft.fileIds || []).filter((id:string)=>props.project.files.some(f=>f.id===id));replyToId.value=draft.replyToId || ''}catch{}
-watch([text,code,codeName,language,pendingIds,replyToId],()=>{
- try{sessionStorage.setItem(draftKey,JSON.stringify({text:text.value,code:code.value,codeName:codeName.value,language:language.value,fileIds:pendingIds.value,replyToId:replyToId.value}))}catch{}
+try {const draft=JSON.parse(sessionStorage.getItem(draftKey) || '{}');text.value=draft.text || '';code.value=draft.code || '';codeName.value=draft.codeName || 'snippet.ts';language.value=draft.language || 'typescript';pendingIds.value=(draft.fileIds || []).filter((id:string)=>props.project.files.some(f=>f.id===id));replyToId.value=draft.replyToId || '';mentionIds.value=Array.isArray(draft.mentionIds)?draft.mentionIds:[]}catch{}
+watch([text,code,codeName,language,pendingIds,replyToId,mentionIds],()=>{
+ try{sessionStorage.setItem(draftKey,JSON.stringify({text:text.value,code:code.value,codeName:codeName.value,language:language.value,fileIds:pendingIds.value,replyToId:replyToId.value,mentionIds:mentionIds.value}))}catch{}
 },{deep:true})
 
 const userName=(id:string)=>store.state?.users.find(u=>u.id===id)?.name || id
@@ -44,6 +47,11 @@ const members=computed(()=>{
  const teachers=store.state?.teachingClasses.find(c=>c.id===task?.classId)?.teacherIds || []
  return store.state?.users.filter(u=>u.enabled && (props.project.memberIds.includes(u.id) || teachers.includes(u.id))) || []
 })
+const mentionOptions = computed(() => {
+ const query = mention.value?.query.toLocaleLowerCase() ?? ''
+ return members.value.filter(u=>u.id!==store.user?.id && [u.name,roleName[u.role]].some(v=>v.toLocaleLowerCase().includes(query)))
+})
+const mentionListId = 'mentions-' + props.project.id
 const visibleMessages=computed(()=>props.project.messages.filter(m=>(m.text+' '+m.code+' '+m.codeName+' '+userName(m.userId)+' '+attachmentIds(m).map(id=>props.project.files.find(f=>f.id===id)?.name).join(' ')).toLowerCase().includes(search.value.toLowerCase())))
 const highlighted=computed(()=>new Map(props.project.messages.filter(m=>m.code).map(m=>[m.id,hljs.highlightAuto(m.code.slice(0,3000)).value])))
 const reply=computed(()=>props.project.messages.find(m=>m.id===replyToId.value))
@@ -109,10 +117,55 @@ watch(()=>props.project.messages.at(-1)?.id,async()=>{
  const nearBottom=!list.value || list.value.scrollHeight-list.value.scrollTop-list.value.clientHeight<140
  await nextTick();if(nearBottom)scrollBottom()
 })
-function insertMention(name:string){
- const el=composer.value?.textarea,start=el?.selectionStart ?? text.value.length,end=el?.selectionEnd ?? start
- text.value=text.value.slice(0,start)+`@${name} `+text.value.slice(end)
- nextTick(()=>el?.focus())
+function updateMention() {
+ const input = composer.value?.textarea
+ if (!input) return
+ const end = input.selectionStart
+ const match = input.value.slice(0,end).match(/(?:^|[^A-Za-z0-9_@＠])([@＠][^@＠\s，。！？；、]*)$/)
+ mention.value = match && end === input.selectionEnd ? {start:end-match[1].length,end,query:match[1].slice(1)} : undefined
+ highlightedMention.value = 0
+}
+function replaceText(start:number, end:number, value:string) {
+ text.value = text.value.slice(0,start) + value + text.value.slice(end)
+ return nextTick(() => {
+   const input = composer.value?.textarea
+   input?.focus()
+   input?.setSelectionRange(start + value.length, start + value.length)
+ })
+}
+async function startMention() {
+ const input = composer.value?.textarea
+ const start = input?.selectionStart ?? text.value.length
+ await replaceText(start,input?.selectionEnd ?? start, start && !/\s/.test(text.value[start-1]) ? ' @' : '@')
+ updateMention()
+}
+function insertMention(user:User) {
+ const range = mention.value
+ if (!range) return
+ const suffix = members.value.filter(member => member.name === user.name).length > 1 ? '（' + roleName[user.role] + '）' : ''
+ mention.value = undefined
+ if (!mentionIds.value.includes(user.id)) mentionIds.value.push(user.id)
+ void replaceText(range.start,range.end,'@' + user.name + suffix + ' ')
+}
+function composerKeys(event:KeyboardEvent) {
+ if (event.isComposing) return
+ if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) {
+   event.preventDefault()
+   void send()
+   return
+ }
+ if (!mention.value) return
+ if (event.key === 'Escape') {event.preventDefault(); mention.value = undefined; return}
+ const count = mentionOptions.value.length
+ if (!count) return
+ if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+   event.preventDefault()
+   highlightedMention.value = (highlightedMention.value + (event.key === 'ArrowDown' ? 1 : count - 1)) % count
+   document.getElementById(mentionListId + '-' + highlightedMention.value)?.scrollIntoView({block:'nearest'})
+ } else if (event.key === 'Enter' && !event.shiftKey) {
+   event.preventDefault()
+   insertMention(mentionOptions.value[highlightedMention.value])
+ }
 }
 function quote(m:Message){replyToId.value=m.id;nextTick(()=>composer.value?.textarea?.focus())}
 function jump(id:string){
@@ -160,11 +213,12 @@ function drop(event:DragEvent){
 }
 async function send(){
  if(!canSend.value)return
- const outgoing={text:text.value,code:code.value,fileIds:[...pendingIds.value],replyToId:replyToId.value,codeName:codeName.value,codeLanguage:language.value}
+ mention.value=undefined
+ const outgoing={mentionIds:[...mentionIds.value],text:text.value,code:code.value,fileIds:[...pendingIds.value],replyToId:replyToId.value,codeName:codeName.value,codeLanguage:language.value}
  busy.value=true
  await run(async()=>{
   await store.act('message',{projectId:props.project.id,...outgoing})
-  if(text.value===outgoing.text)text.value=''
+  if(text.value===outgoing.text){text.value='';mentionIds.value=[]}
   if(code.value===outgoing.code)code.value=''
   pendingIds.value=pendingIds.value.filter(id=>!outgoing.fileIds.includes(id))
   if(replyToId.value===outgoing.replyToId)replyToId.value=''
@@ -226,8 +280,16 @@ onBeforeUnmount(()=>{clearInterval(poll);codeRequest++})
   </div>
   <div v-if="!readonly" class="chat-composer-wrap" @dragover.prevent @drop.prevent="drop">
    <div v-if="reply" class="composer-reply"><MessageSquareReply :size="14" /><span>回复 {{userName(reply.userId)}}：{{reply.text || reply.codeName || '附件'}}</span><button aria-label="取消回复" @click="replyToId=''"><X :size="14" /></button></div>
-   <div class="chat-composer"><div class="chat-composer-tools"><el-dropdown trigger="click" @command="insertMention"><button title="提及成员" aria-label="提及成员"><AtSign :size="17" /></button><template #dropdown><el-dropdown-menu><el-dropdown-item v-for="u in members.filter(u=>u.id!==store.user?.id)" :key="u.id" :command="u.name">{{u.name}}</el-dropdown-item></el-dropdown-menu></template></el-dropdown><button title="上传附件" aria-label="上传聊天附件" :disabled="uploading" @click="uploadInput?.click()"><Paperclip :size="17" /></button><button title="从项目资料库选择" aria-label="从资料库选择附件" @click="showPanel('files');fileScope='library'"><FolderOpen :size="17" /></button><button title="代码片段" aria-label="编写代码片段" @click="codeDialog=true"><Braces :size="18" /></button><small>拖入文件即可添加附件</small></div>
-    <el-input ref="composer" v-model="text" type="textarea" :autosize="{minRows:3,maxRows:6}" placeholder="发送项目消息，或拖入代码、文档…" maxlength="10000" resize="none" @keydown.ctrl.enter.prevent="send" @keydown.meta.enter.prevent="send" />
+   <div class="chat-composer"><div class="chat-composer-tools"><button title="提及成员" aria-label="提及成员" @mousedown.prevent @click="startMention"><AtSign :size="17" /></button><button title="上传附件" aria-label="上传聊天附件" :disabled="uploading" @click="uploadInput?.click()"><Paperclip :size="17" /></button><button title="从项目资料库选择" aria-label="从资料库选择附件" @click="showPanel('files');fileScope='library'"><FolderOpen :size="17" /></button><button title="代码片段" aria-label="编写代码片段" @click="codeDialog=true"><Braces :size="18" /></button><small>拖入文件即可添加附件</small></div>
+    <div class="chat-compose-input">
+    <el-input ref="composer" v-model="text" type="textarea" :autosize="{minRows:3,maxRows:6}" placeholder="发送项目消息，或拖入代码、文档…" maxlength="10000" resize="none" aria-label="项目消息" :aria-controls="mention ? mentionListId : undefined" :aria-activedescendant="mention && mentionOptions.length ? mentionListId + '-' + highlightedMention : undefined" @input="updateMention" @compositionend="updateMention" @click="updateMention" @blur="mention=undefined" @keydown="composerKeys" />
+    <div v-if="mention" :id="mentionListId" class="chat-mention-picker" role="listbox" aria-label="可提及的项目成员">
+      <button v-for="(u,i) in mentionOptions" :id="mentionListId + '-' + i" :key="u.id" role="option" type="button" :aria-selected="i===highlightedMention" @mouseenter="highlightedMention=i" @mousedown.prevent @click="insertMention(u)">
+        <span>{{u.name}}</span><el-tag size="small" effect="plain" :type="u.role==='teacher' ? 'primary' : 'info'">{{roleName[u.role]}}</el-tag>
+      </button>
+      <small v-if="!mentionOptions.length" class="muted">没有匹配的项目成员</small>
+    </div>
+    </div>
     <div v-if="code" class="pending-snippet"><Code2 :size="14" /><button @click="codeDialog=true">{{codeName}} · {{code.split('\n').length}} 行代码</button><button aria-label="移除代码片段" @click="code=''"><X :size="13" /></button></div>
     <div v-if="pendingFiles.length" class="pending-files"><div v-for="f in pendingFiles" :key="f.id"><Paperclip :size="13" /><span>{{f.name}}</span><button :aria-label="'移除 '+f.name" @click="pendingIds=pendingIds.filter(id=>id!==f.id)"><X :size="13" /></button></div></div>
     <div class="chat-composer-footer"><small>{{uploading?'正在上传附件…':'Ctrl / ⌘ + Enter 发送 · 附件最多 10 个'}}</small><el-button type="primary" :disabled="!canSend" :loading="busy || uploading" size="small" @click="send"><Send :size="14" />发送</el-button></div>
@@ -265,6 +327,6 @@ onBeforeUnmount(()=>{clearInterval(poll);codeRequest++})
  </div>
 
  <el-dialog v-model="codeDialog" title="分享代码片段" width="min(760px, 94vw)" append-to-body><el-form label-position="top"><div class="form-grid"><el-form-item label="文件名"><el-input v-model="codeName" maxlength="180" placeholder="例如 src/main.ts" /></el-form-item><el-form-item label="代码语言"><el-select v-model="language"><el-option v-for="v in ['typescript','javascript','python','java','html','css','json','sql','cpp','go','rust','plaintext']" :key="v" :value="v" /></el-select></el-form-item></div><el-form-item label="代码内容"><el-input v-model="code" type="textarea" :rows="14" maxlength="50000" class="code-input" placeholder="粘贴代码，保留缩进。相同文件名的片段可在右侧对比版本。" /></el-form-item></el-form><template #footer><el-button @click="codeDialog=false">返回消息</el-button><el-button type="primary" @click="confirmSnippet">添加到消息</el-button></template></el-dialog>
- <el-dialog v-model="memberDialog" title="频道成员" width="420px"><div v-for="u in members" :key="u.id" class="list-row"><span>{{u.name}}</span><el-tag size="small">{{u.role==='teacher'?'任课教师':u.id===project.leaderId?'项目负责人':'项目成员'}}</el-tag></div></el-dialog>
+ <el-dialog v-model="memberDialog" title="频道成员" width="min(420px, 94vw)" modal-class="channel-members-overlay" align-center append-to-body><div v-for="u in members" :key="u.id" class="list-row"><span>{{u.name}}</span><el-tag size="small">{{u.role==='teacher'?'任课教师':u.id===project.leaderId?'项目负责人':'项目成员'}}</el-tag></div></el-dialog>
  <el-dialog :model-value="!!filePreview" :title="filePreview?.name" width="min(900px, 94vw)" @close="filePreview=undefined"><div v-if="filePreview" class="chat-file-preview"><img v-if="filePreview.type.startsWith('image/')" :src="`/api/projects/${project.id}/files/${filePreview.id}`" :alt="filePreview.name" /><iframe v-else-if="filePreview.type==='application/pdf' || /\.pdf$/i.test(filePreview.name)" :src="`/api/projects/${project.id}/files/${filePreview.id}`" title="群文件预览" /><el-empty v-else description="此格式请下载后查看" :image-size="56" /><a :href="fileDownloadUrl(project.id,filePreview.id)">下载原文件</a></div></el-dialog>
 </template>

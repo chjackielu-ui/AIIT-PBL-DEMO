@@ -76,7 +76,7 @@ export const router = createRouter({
         {path: 'teacher/classes/:classId/tasks/:id', component: TaskDetail, meta: {role: 'teacher'}},
         {path: 'teacher/classes/:classId/tasks/:id/edit', component: TaskForm, meta: {role: 'teacher'}},
         {path: 'teacher/classes/:classId/projects', component: Projects, meta: {role: 'teacher'}},
-        {path:'teacher/classes/:classId/projects/:id',component:NotFound,meta:{role:'teacher'}},
+        {path:'teacher/classes/:classId/projects/:id',component:Workspace,meta:{role:'teacher'}},
         {path: 'teacher/classes/:classId/reviews/:kind', component: () => import('./pages/ReviewCenter.vue'), meta: {role: 'teacher'}},
         {path: 'teacher/task-register', component: TaskRegister, meta: {role: 'teacher'}},
         // —— 管理员端 ——
@@ -88,7 +88,8 @@ export const router = createRouter({
         {path: 'admin/projects/:id', component: Workspace, meta: {role: 'admin'}},
         // —— 公共页 ——
         {path: 'notifications', component: Notices},
-        {path: 'profile/settings', component: Profile},
+        {path: 'profile', component: Profile},
+        {path: 'profile/settings', redirect: '/profile'},
         // —— 旧地址兼容（声明式重定向，通知与历史书签依赖） ——
         {path: 'teacher/classes/:classId/course', redirect: (to) => classPath(String(to.params.classId)) + '/settings'},
         {path: 'teacher/classes/:classId/course/tasks/:id', redirect: (to) => taskPath(String(to.params.classId), String(to.params.id))},
@@ -123,7 +124,11 @@ router.onError((error, to) => {
 router.beforeEach(async (to,from) => {
   const store = useStore()
   if (!store.loaded) await store.load()
-  if (to.path.startsWith('/share/') || to.path.startsWith('/join/') || to.path === '/login') return true
+  if (to.path === '/login') {
+    if (store.user) await store.load()
+    return store.user ? {path: `/${store.user.role}/dashboard`, replace: true} : true
+  }
+  if (to.path.startsWith('/share/') || to.path.startsWith('/join/')) return true
   if (!store.user) {
     return {path: '/login', query: {redirect: to.fullPath}}
   }
@@ -142,15 +147,19 @@ router.beforeEach(async (to,from) => {
     const url = new URL(destination, window.location.origin)
     return {path: url.pathname, query: {...to.query, ...Object.fromEntries(url.searchParams)}}
   }
-  if(store.user.role==='teacher' && /^\/teacher\/classes\/[^/]+\/projects\/[^/]+$/.test(to.path)){
-    const p=store.state?.projects.find(p=>p.id===to.params.id)
-    const task=store.state?.tasks.find(t=>t.id===p?.taskId && t.classId===to.params.classId)
-    return task?{path:taskPath(task.classId,task.id),query:{...to.query,project:p!.id}}:classPath(String(to.params.classId))
-  }
   const workflow=/\/(projects|tasks)\/[^/]+/.test(to.path) || /\/milestones\//.test(to.path) || (to.path==='/student/tasks' && !!to.query.classId)
   if(workflow && !validOrigin(to.query.origin,store.user.role)){
     const origin=validOrigin(from.query.origin,store.user.role) || navigationRoot(from.path,store.user.role)
     if(origin)return {...to,query:{...to.query,origin},replace:true}
   }
   return true
+})
+
+window.addEventListener('pageshow', async event => {
+  if (!event.persisted) return
+  const store = useStore()
+  await store.load()
+  const path = router.currentRoute.value.path
+  if (store.user && path === '/login') await router.replace(`/${store.user.role}/dashboard`)
+  if (!store.user && !/^\/(login|join|share)(\/|$)/.test(path)) await router.replace({path:'/login',query:{redirect:path}})
 })

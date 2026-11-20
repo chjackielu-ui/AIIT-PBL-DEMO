@@ -21,7 +21,7 @@ async function changeStatus(itemId: string, status: string) {
 </script>
 <template>
  <section class="section project-task-board">
-  <div class="section-head"><h2>项目任务概览与提交</h2></div>
+  <div class="section-head"><h2>项目工作项</h2><slot name="actions" /></div>
   <div class="toolbar"><el-radio-group v-model="view"><el-radio-button v-for="v in ['待完成','已完成','已过期','全部']" :key="v" :value="v">{{v}}</el-radio-button></el-radio-group></div>
   <el-table :data="visible" class="assignment-table"><el-table-column label="任务" min-width="200"><template #default="{row:i}"><strong>{{i.title}}</strong></template></el-table-column><el-table-column label="负责人" min-width="100"><template #default="{row:i}">{{userName(i.ownerId)}}</template></el-table-column><el-table-column prop="due" label="截止日期" width="125" /><el-table-column label="状态" width="115"><template #default="{row:i}"><span class="task-status-label" :class="statusClass(i)">{{statusLabel(i)}}</span></template></el-table-column><el-table-column label="操作" width="145" fixed="right" align="right"><template #default="{row:i}"><el-button v-if="canChange(i) && i.status==='待开始'" type="primary" plain @click="changeStatus(i.id,'进行中')">开始任务</el-button><el-button v-else-if="canChange(i) && ['进行中','待验收'].includes(i.status)" type="primary" @click="changeStatus(i.id,'已完成')">标记完成</el-button><span v-else class="muted">{{i.status==='已完成'?'已完成':i.status==='待验收'?'等待验收':'—'}}</span></template></el-table-column><template #empty>暂无符合条件的任务</template></el-table>
  </section>

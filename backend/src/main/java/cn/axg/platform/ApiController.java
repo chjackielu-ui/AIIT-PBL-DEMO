@@ -49,7 +49,22 @@ public class ApiController {
  @PostMapping("/classes/{cid}/files") ObjectNode classUpload(@PathVariable String cid,@RequestParam String category,@RequestParam MultipartFile file,HttpSession session) throws IOException {return service.classUpload(uid(session),cid,category,file);}
  @GetMapping("/classes/{cid}/files/{fid}") ResponseEntity<byte[]> classFile(@PathVariable String cid,@PathVariable String fid,@RequestParam(defaultValue="false") boolean download,HttpSession session) throws IOException {return bytes(service.classFile(uid(session),cid,fid),download);}
  @GetMapping("/state") ObjectNode state(HttpSession session){return service.view(uid(session));}
- @PostMapping("/actions") ObjectNode action(@RequestBody ObjectNode body,HttpSession session) throws IOException {return service.action(uid(session),body);}
+ @PostMapping("/actions") ObjectNode action(@RequestBody ObjectNode body,HttpSession session) throws IOException {
+  ObjectNode result=service.action(uid(session),body);
+  if (body.path("op").asText().equals("changePassword")) {
+   session.setAttribute("version",result.remove("sessionVersion").asLong());
+  }
+  return result;
+ }
+ @GetMapping("/profile/avatar") ResponseEntity<byte[]> avatar(HttpSession session) throws IOException {
+  return ResponseEntity.ok().contentType(MediaType.IMAGE_PNG).cacheControl(CacheControl.noStore())
+      .header("X-Content-Type-Options","nosniff").body(service.avatar(uid(session)));
+ }
+ @PostMapping("/profile/avatar") ObjectNode uploadAvatar(@RequestParam MultipartFile file,HttpSession session) throws IOException {
+  return Seed.o("avatarVersion",service.saveAvatar(uid(session),file));
+ }
+ @DeleteMapping("/profile/avatar") @ResponseStatus(HttpStatus.NO_CONTENT)
+ void deleteAvatar(HttpSession session) throws IOException {service.removeAvatar(uid(session));}
  @PostMapping("/admin/course-import/preview") ObjectNode previewCourses(@RequestBody ObjectNode body,HttpSession session) throws IOException {
   return service.action(uid(session),Seed.o("op","previewCourses","rows",body.path("rows")));
  }

@@ -3,7 +3,7 @@ import {computed} from 'vue'
 import {useStore} from '../../store'
 import type {Project} from '../../types'
 import {fileDownloadUrl, stamp} from '../../lib'
-import {projectDeadline, projectProgress,pendingSubmissions} from '../../projectPresentation'
+import {projectDeadline, projectProgress,pendingSubmissions,projectPhases} from '../../projectPresentation'
 
 const props = defineProps<{project: Project}>()
 const emit = defineEmits<{goto: [tab: string]}>()
@@ -14,7 +14,7 @@ const task = computed(() => s.value.tasks.find(t => t.id === props.project.taskI
 const userName = (id: string) => s.value.users.find(u => u.id === id)?.name || id
 const progress = computed(() => projectProgress(s.value, props.project))
 const completed = computed(() => props.project.items.filter(i => i.status === '已完成').length)
-const pendingReviews = computed(() => pendingSubmissions(props.project,task.value?.milestones || []).length)
+const pendingReviews = computed(() => pendingSubmissions(props.project,projectPhases(task.value,props.project)).length)
 </script>
 <template>
   <div class="dashboard-grid">

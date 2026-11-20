@@ -4,7 +4,6 @@ import {safeLink} from '../lib'
 interface ProjectDoc {
   name: string
   description: string
-  goal: string
   tags: string
   created: string
   status: string
@@ -32,8 +31,6 @@ const link = safeLink(props.data.link || '')
     <section>
       <h2>项目简介</h2>
       <p class="pre-wrap">{{data.description}}</p>
-      <h2>项目目标与背景</h2>
-      <p class="pre-wrap">{{data.goal}}</p>
     </section>
     <section>
       <h2>团队介绍</h2>

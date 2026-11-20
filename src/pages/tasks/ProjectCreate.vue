@@ -3,9 +3,11 @@ import {computed, onMounted, reactive, ref} from 'vue'
 import {useRoute, useRouter} from 'vue-router'
 import type {FormInstance, FormRules} from 'element-plus'
 import {useStore} from '../../store'
-import {isIndividual,taskModeName} from '../../taskMode'
-import {run, localDate} from '../../lib'
+import {isIndividual,taskModeName,canStartTask,taskStarted} from '../../taskMode'
+import {run, stamp} from '../../lib'
 import PageHead from '../../components/PageHead.vue'
+import ProjectTopics from '../../components/ProjectTopics.vue'
+import {validOrigin} from '../../navigation'
 
 const store = useStore()
 const route = useRoute()
@@ -20,13 +22,12 @@ const alreadyJoined = computed(() =>
 /** 组队/申请截止已过则不允许提交（与服务端校验一致，提前拦截）。 */
 const deadlinePassed = computed(() => {
   if (!task.value) return false
-  const today = localDate()
-  return today > task.value.teamDue || today > task.value.due
+  return !canStartTask(task.value)
 })
 
-const projectForm = reactive({name: isIndividual(task.value)?`${task.value!.name} · ${store.user!.name}`:'', description: isIndividual(task.value)?task.value!.description:'', goal: isIndividual(task.value)?task.value!.description:'', tags: 'Java / Vue', memberIds: [store.user!.id]})
+const projectForm = reactive({name:'', description:'', tags: '', memberIds: [store.user!.id]})
 const required = {required: true, message: '请填写此项', trigger: 'blur'}
-const projectRules: FormRules = {name: [required], description: [required], goal: [required]}
+const projectRules: FormRules = {name: [required], description: [required]}
 const projectRef = ref<FormInstance>()
 const busy = ref(false)
 
@@ -40,40 +41,51 @@ const available = computed(() =>
 const className = (id: string) => s.value.classes.find(c => c.id === id)?.name || id
 
 async function createProject() {
+  if (busy.value || alreadyJoined.value || deadlinePassed.value) return
   if (!await projectRef.value?.validate().catch(() => false)) return
   busy.value = true
   await run(async () => {
     const result = await store.act('createProject', {taskId: task.value!.id, ...projectForm})
     await router.push('/student/projects/' + result.id)
-  }, isIndividual(task.value)?'个人项目已创建，可独立提交材料':'申请已提交，成员名单已锁定')
+  }, '申请已提交，等待教师审核')
   busy.value = false
 }
 </script>
 <template>
-  <template v-if="task">
+  <template v-if="task && task.taskKind !== 'exercise'">
     <PageHead title="创建项目">
-      <el-button @click="router.back()">取消</el-button>
-      <el-button type="primary" :loading="busy" :disabled="!!alreadyJoined || deadlinePassed" @click="createProject">{{isIndividual(task)?'创建个人项目':'提交小组项目申请'}}</el-button>
     </PageHead>
-    <div class="info-strip">关联任务：{{task.name}} · {{taskModeName(task)}} · {{isIndividual(task)?'本人独立提交':task.min+'–'+task.max+' 人，每组提交一份'}} · {{task.crossClass ? '允许跨班组队' : '仅限本教学班'}} · 组队截止 {{task.teamDue}}</div>
+    <div class="info-strip">关联任务：{{task.name}} · {{taskModeName(task)}} · {{isIndividual(task)?'本人独立提交':task.min+'–'+task.max+' 人，每组提交一份'}} · {{task.crossClass ? '允许跨班组队' : '仅限本教学班'}} · 截止 {{stamp(task.due)}}</div>
     <el-alert v-if="alreadyJoined" title="你已加入该课程任务的一个项目，不能重复组队。" type="warning" :closable="false">
       <el-button type="primary" @click="router.push(`/student/projects/${alreadyJoined.id}`)">进入我的项目</el-button>
     </el-alert>
-    <el-alert v-else-if="deadlinePassed" title="组队或申请截止时间已过，无法提交申请。" type="warning" :closable="false" />
-    <el-form ref="projectRef" :model="projectForm" :rules="projectRules" label-position="top" class="form-page">
+    <el-alert v-else-if="deadlinePassed" :title="!taskStarted(task) ? '课程项目尚未开始' : '课程项目已截止，无法提交申请'" type="warning" :closable="false" />
+    <el-form ref="projectRef" :model="projectForm" :rules="projectRules" label-position="top" class="section project-application" @submit.prevent="createProject">
       <el-form-item label="项目名称" prop="name"><el-input v-model="projectForm.name" maxlength="100" /></el-form-item>
-      <el-form-item label="项目简介" prop="description"><el-input v-model="projectForm.description" type="textarea" :rows="3" /></el-form-item>
-      <el-form-item label="项目目标" prop="goal"><el-input v-model="projectForm.goal" type="textarea" :rows="3" /></el-form-item>
-      <el-form-item label="技术 / 主题标签"><el-input v-model="projectForm.tags" /></el-form-item>
+      <el-form-item label="项目简介" prop="description"><el-input v-model="projectForm.description" type="textarea" :rows="5" /></el-form-item>
+      <div class="application-fields">
+      <el-form-item label="技术与主题"><ProjectTopics v-model="projectForm.tags" /></el-form-item>
       <el-form-item v-if="!isIndividual(task)" label="项目成员（包含当前负责人）" required>
         <el-select v-model="projectForm.memberIds" multiple filterable :disabled="!!alreadyJoined || deadlinePassed">
           <el-option v-for="u in available" :key="u.id" :value="u.id" :disabled="u.id === store.user?.id" :label="`${u.name} · ${className(u.classId || '')}`" />
         </el-select>
       </el-form-item>
+      </div>
       <p v-if="!isIndividual(task)" class="muted">负责人：{{store.user?.name}}。提交后成员自动加入，名单只能由教师调整。</p>
+      <div class="actions application-actions">
+        <el-button @click="router.push(validOrigin(route.query.origin,'student') || '/student/tasks/' + task.id)">取消</el-button>
+        <el-button type="primary" native-type="submit" :loading="busy" :disabled="!!alreadyJoined || deadlinePassed">提交项目申请</el-button>
+      </div>
     </el-form>
   </template>
   <el-result v-else title="任务不存在或无权访问">
     <template #extra><el-button @click="router.push('/student/tasks')">返回任务列表</el-button></template>
   </el-result>
 </template>
+
+<style scoped>
+.application-fields {display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0 18px}
+.application-actions {justify-content:flex-end;border-top:1px solid var(--line);padding-top:16px}
+.project-application :deep(.el-select) {width:100%}
+@media(max-width:760px){.application-fields{grid-template-columns:minmax(0,1fr)}}
+</style>

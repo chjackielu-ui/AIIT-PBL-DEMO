@@ -26,7 +26,7 @@ async function submit() {
         registering.value = false
       }
       await store.login(id.value.trim(), role.value, password.value)
-      await router.push(safeRedirect(String(route.query.redirect || '')) || `/${role.value}/dashboard`)
+      await router.replace(safeRedirect(String(route.query.redirect || '')) || `/${role.value}/dashboard`)
     }, '')
   } finally { busy.value = false }
 }
