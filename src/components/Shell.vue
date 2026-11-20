@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import {computed, ref} from 'vue'
 import {useRoute, useRouter} from 'vue-router'
-import {LayoutDashboard, FolderKanban, ClipboardList, Bell, GraduationCap, Users, Upload, LogOut, CheckSquare, Layers, MessagesSquare, Library, ChevronLeft, ChevronRight} from 'lucide-vue-next'
+import {LayoutDashboard, FolderKanban, ClipboardList, Bell, GraduationCap, Users, Upload, LogOut, CheckSquare, BookOpen, MessagesSquare, Library, PanelLeftClose, PanelLeftOpen, ChevronRight} from 'lucide-vue-next'
 import {useStore} from '../store'
 
 import {roleName, run} from '../lib'
@@ -16,7 +16,7 @@ const collapsed = ref(localStorage.getItem('pbl-sidebar-folded')==='true')
 function toggleSidebar(){collapsed.value=!collapsed.value;localStorage.setItem('pbl-sidebar-folded',String(collapsed.value))}
 interface MenuItem {name: string; path: string; icon: unknown; match?: (path: string) => boolean}
 
-const menus = computed<MenuItem[]>(() => {
+const menuGroups = computed(() => {
   const role = store.user?.role
   const roleMenus: MenuItem[] = role === 'teacher'
     ? [
@@ -41,12 +41,15 @@ const menus = computed<MenuItem[]>(() => {
           {name: '项目列表', path: '/admin/projects', icon: FolderKanban, match: p => p === '/admin/projects' || p.startsWith('/admin/projects/')},
           {name: '小学期课程导入', path: '/admin/course-import', icon: ClipboardList},
         ]
-  return [
-    {name: '工作台', path: `/${role}/dashboard`, icon: LayoutDashboard, match: p => p === `/${role}/dashboard`},
-    ...roleMenus,
-    ...(role !== 'admin' ? [{name: '项目讨论', path: `/${role}/discussions`, icon: MessagesSquare, match: (p:string) => p.startsWith(`/${role}/discussions`)}] : []),
-    {name: '通知中心', path: '/notifications', icon: Bell, match: p => p === '/notifications'},
+  const groups: {label: string; items: MenuItem[]}[] = [
+    {label: '', items: [{name: '工作台', path: `/${role}/dashboard`, icon: LayoutDashboard}]},
+    {label: role === 'student' ? '课程与学习' : role === 'teacher' ? '教学管理' : '平台管理', items: roleMenus},
+    {label: '消息与协作', items: [
+      ...(role !== 'admin' ? [{name: '项目讨论', path: `/${role}/discussions`, icon: MessagesSquare, match: (p:string) => p.startsWith(`/${role}/discussions`)}] : []),
+      {name: '通知中心', path: '/notifications', icon: Bell},
+    ]},
   ]
+  return groups
 })
 
 const unread = computed(() => store.state?.notifications.filter(n => !n.read).length || 0)
@@ -59,30 +62,37 @@ function active(item: MenuItem) {
   return item.match ? item.match(route.path) : route.path === item.path
 }
 
+const currentArea = computed(() => menuGroups.value.flatMap(group => group.items).find(active)?.name)
 </script>
 <template>
   <div v-if="store.user" class="app-shell" :class="{collapsed,'discussion-mode':route.path.includes('/discussions')}">
-    <aside>
-      <RouterLink :to="`/${store.user.role}/dashboard`" class="brand">
-        <span class="brand-mark"><Layers :size="20" /></span>
-        <span v-if="!collapsed">安信工 · 项目管理</span>
+    <aside class="workspace-sidebar">
+      <RouterLink :to="`/${store.user.role}/dashboard`" class="brand" aria-label="返回工作台">
+        <span class="brand-mark"><BookOpen :size="19" :stroke-width="1.8" aria-hidden="true" /></span>
+        <span v-if="!collapsed" class="brand-copy"><strong>安信工</strong><small>项目管理平台</small></span>
       </RouterLink>
-      <div v-if="!collapsed" class="side-caption">{{roleName[store.user.role]}}工作空间</div>
-      <nav>
-        <RouterLink v-for="item in menus" :key="item.path" :to="item.path" :title="item.name" :class="{active: active(item)}">
-          <component :is="item.icon" :size="16" />
-          <span v-if="!collapsed">{{item.name}}</span>
-          <span v-if="item.path === '/notifications' && unread && !collapsed" class="count">{{unread}}</span>
-          <span v-if="item.path === '/student/submissions' && pending" class="pending-count" :aria-label="`${pending} 项待完成任务`">{{pending}}</span>
-        </RouterLink>
+      <nav class="workspace-nav" aria-label="工作空间导航">
+        <div v-for="group in menuGroups" :key="group.label" class="nav-group">
+          <p v-if="group.label && !collapsed" class="nav-heading">{{group.label}}</p>
+          <RouterLink v-for="item in group.items" :key="item.path" :to="item.path" :aria-label="item.name"
+            :title="item.name" :aria-current="active(item) ? 'page' : undefined" :class="{active: active(item)}">
+            <component :is="item.icon" :size="17" :stroke-width="1.65" aria-hidden="true" />
+            <span v-if="!collapsed">{{item.name}}</span>
+            <span v-if="item.path === '/notifications' && unread" class="nav-count">{{unread}}</span>
+            <span v-if="item.path === '/student/submissions' && pending" class="nav-count">{{pending}}</span>
+          </RouterLink>
+        </div>
       </nav>
+      <button class="nav-toggle" :aria-label="collapsed?'展开导航':'收起导航'" :aria-expanded="!collapsed" @click="toggleSidebar">
+        <component :is="collapsed ? PanelLeftOpen : PanelLeftClose" :size="17" aria-hidden="true" />
+        <span v-if="!collapsed">收起导航</span>
+      </button>
     </aside>
-    <div class="sidebar-fold-zone"><button class="sidebar-fold-handle" :aria-label="collapsed?'展开导航栏':'收起导航栏'" :aria-expanded="!collapsed" :title="collapsed?'展开导航栏':'收起导航栏'" @click="toggleSidebar"><ChevronRight v-if="collapsed" :size="16" /><ChevronLeft v-else :size="16" /></button></div>
     <div class="app-main">
       <header>
-        <div class="actions">
-          <span class="muted">项目管理平台</span>
-          <span>{{roleName[store.user.role]}}端</span>
+        <div class="workspace-location">
+          <span>{{roleName[store.user.role]}}工作空间</span>
+          <template v-if="currentArea"><ChevronRight :size="13" aria-hidden="true" /><span>{{currentArea}}</span></template>
         </div>
         <div class="actions">
           <RouterLink to="/notifications" class="icon-button" aria-label="通知中心">

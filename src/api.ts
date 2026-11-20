@@ -20,5 +20,6 @@ export async function api<T = any>(path: string, body?: unknown, method?: string
     try { message = (await res.json()).message || message } catch {}
     throw Error(message)
   }
-  return res.status === 204 ? undefined as T : res.json()
+  const content = await res.text()
+  return content ? JSON.parse(content) as T : undefined as T
 }

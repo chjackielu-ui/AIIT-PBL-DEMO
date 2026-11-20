@@ -1,13 +1,13 @@
-/* ============ 设计令牌（白色简约蓝白风格：白底、蓝色 #2563eb、小圆角、无阴影） ============ */
+/* ============ 设计令牌（学习工作空间） ============ */
 :root {
   font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei", sans-serif;
   color: #1f2937;
   background: #fff;
   font-size: 14px;
   line-height: 1.5;
-  --primary: #2563eb;
-  --primary-hover: #1d4ed8;
-  --selected: #eff6ff;
+  --primary: #3456a3;
+  --primary-hover: #254487;
+  --selected: #eaf0fc;
   --text: #1f2937;
   --muted: #64748b;
   --light: #94a3b8;
@@ -16,8 +16,8 @@
   --success: #15803d;
   --warning: #b45309;
   --danger: #b91c1c;
-  --radius: 6px;
-  --small-radius: 4px;
+  --radius: 10px;
+  --small-radius: 7px;
   --s1: 4px;
   --s2: 8px;
   --s3: 12px;
@@ -32,14 +32,14 @@
   --section: 16px;
   --title: 20px;
   /* Element Plus 覆盖：蓝白、无阴影 */
-  --el-color-primary: #2563eb;
-  --el-color-primary-light-3: #608bf0;
-  --el-color-primary-light-5: #93b1f5;
-  --el-color-primary-light-7: #bed1fa;
-  --el-color-primary-light-8: #d5e2fc;
-  --el-color-primary-light-9: #eff6ff;
+  --el-color-primary: #3456a3;
+  --el-color-primary-light-3: #5876b8;
+  --el-color-primary-light-5: #8ea4ce;
+  --el-color-primary-light-7: #bfcee6;
+  --el-color-primary-light-8: #d6e0f1;
+  --el-color-primary-light-9: #eaf0fc;
   --el-border-color: #e2e8f0;
-  --el-border-radius-base: 6px;
+  --el-border-radius-base: 8px;
   --el-font-size-base: 14px;
   --el-component-size: 40px;
   --el-box-shadow: none;
@@ -239,12 +239,14 @@ nav a.active {color: var(--primary); background: var(--selected); font-weight: 5
 .compact-stats {gap: 12px; margin-bottom: 12px}
 .compact-stats button {display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; min-height: 60px}
 .compact-stats strong {font-size: 24px; color: var(--primary)}
-.identity-card {display: flex; align-items: center; gap: 14px; background: #fff; border: 1px solid var(--line); border-radius: var(--radius); padding: 16px; margin-bottom: 12px}
+.identity-card {display: flex; flex-wrap: wrap; align-items: center; gap: 16px 24px; background: #fff; border: 1px solid var(--line); border-radius: var(--radius); padding: 16px; margin-bottom: 12px}
+.identity-person {display: flex; align-items: center; gap: 14px; flex: 1 1 340px; min-width: 0}
 .identity-avatar {display: grid; place-items: center; width: 48px; height: 48px; background: var(--selected); color: var(--primary); font-size: 20px; font-weight: 600; border-radius: var(--radius); flex-shrink: 0}
-.identity-copy {min-width: 0; flex: 1}
+.identity-copy {min-width: 0; overflow-wrap: anywhere}
 .identity-copy h2 {margin: 0 0 6px; font-size: 18px}
 .identity-facts {display: flex; gap: 8px 16px; flex-wrap: wrap; color: var(--muted)}
-.identity-shortcuts {display: flex; gap: 8px; flex-wrap: wrap}
+.identity-shortcuts {display: flex; gap: 8px; flex-wrap: wrap; min-width: 0; max-width: 100%}
+.identity-shortcuts .el-button {margin-left: 0}
 .dashboard-grid {display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr); gap: var(--s5)}
 .list-row {display: flex; align-items: center; justify-content: space-between; gap: var(--s4); padding: var(--s4) 0; border-bottom: 1px solid var(--line)}
 .list-row:last-child {border-bottom: 0}
@@ -393,11 +395,6 @@ code.hljs {padding: var(--s4); line-height: 1.6}
 .account-option {border: 1px solid var(--line); border-radius: var(--small-radius); padding: var(--s3); text-align: left; background: white}
 .account-option:hover {border-color: var(--primary)}
 .account-option small {display: block; margin-top: var(--s1)}
-.login-page {min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: var(--s5)}
-.login-brand {display: flex; gap: var(--s2); align-items: center; font-size: var(--section); font-weight: 600; margin-bottom: var(--s5)}
-.login-brand svg {color: var(--primary)}
-.login-box {border: 1px solid var(--line); border-radius: var(--radius); padding: var(--s6); width: 560px; max-width: 100%}
-.login-box > .muted {margin-bottom: var(--s5)}
 .role-options {display: flex; flex-direction: column; gap: var(--s3)}
 .role-options > button {display: flex; align-items: center; gap: var(--s4); padding: var(--s4); border: 1px solid var(--line); border-radius: var(--small-radius); background: white; text-align: left; color: var(--text)}
 .role-options > button:hover {border-color: var(--primary); background: var(--selected)}
@@ -434,8 +431,6 @@ code.hljs {padding: var(--s4); line-height: 1.6}
   .teaching-class-grid {grid-template-columns: repeat(3, minmax(0, 1fr))}
 }
 @media (max-width: 1150px) {
-  .identity-card {flex-wrap: wrap}
-  .identity-shortcuts {margin-left: 62px}
   .project-grid {grid-template-columns: repeat(2, minmax(0, 1fr))}
 }
 @media (max-width: 1100px) {
@@ -478,12 +473,9 @@ code.hljs {padding: var(--s4); line-height: 1.6}
   .composer-bottom {flex-wrap: wrap}
   .toolbar > .el-input, .toolbar > .el-select {width: 100%}
   .activity-row time {white-space: normal; max-width: 100px}
-  .login-box {padding: var(--s5)}
   .account-grid {grid-template-columns: 1fr}
-  .identity-card {padding: 12px; gap: 10px}
-  .identity-copy {flex-basis: calc(100% - 60px)}
-  .identity-shortcuts {margin-left: 0; width: 100%}
-  .identity-shortcuts .el-button {flex: 1; min-width: 120px}
+  .identity-shortcuts {width: 100%}
+  .identity-shortcuts .el-button {flex: 1 1 auto}
   .identity-facts {gap: 4px 12px}
   .teaching-class-grid {grid-template-columns: 1fr}
   .teaching-class-card {padding: 12px}
@@ -642,3 +634,101 @@ code.hljs {padding: var(--s4); line-height: 1.6}
 .class-task-toolbar>.el-input{width:130px;min-width:130px;max-width:130px;flex:none}.class-task-toolbar>.el-select{width:115px;min-width:115px;max-width:115px;flex:none}.class-task-toolbar>.el-select:has([aria-label="任务排序"]){width:145px;min-width:145px;max-width:145px}.class-task-toolbar>.el-button{flex:none;margin:0;padding-inline:11px;font-size:13px}
 .application-list .review-group{padding:14px 16px;margin-bottom:12px}.application-record{display:flex;align-items:center;gap:14px}.application-record-main{flex:1;min-width:0}.application-record-main h2{font-size:16px;margin:3px 0 5px}.application-description{margin:0 0 7px;font-size:13px;line-height:1.6;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}.application-facts{display:flex;flex-wrap:wrap;gap:5px 20px;font-size:12px;color:var(--muted)}.application-record-actions{display:flex;align-items:center;gap:12px;flex:none}.application-record-actions .el-button{margin:0}
 @media(max-width:700px){.application-record{align-items:flex-start;gap:8px;flex-wrap:wrap}.application-record-main{flex-basis:calc(100% - 40px)}.application-record-actions{margin-left:auto}.class-module-tabs .el-tabs__nav{width:max-content}}
+
+/* 学习与教学共用的导航和工作区。 */
+.app-shell .app-main {background: #fafbfC}
+.app-shell .workspace-sidebar {padding: 0 12px; background: #f5f6f8; border-right: 1px solid #dee2e8}
+.workspace-sidebar .brand {min-height: 78px; height: auto; gap: 11px; padding-inline: 8px; color: #202c40; border: 0}
+.workspace-sidebar .brand-mark {height: 34px; width: 34px; justify-content: center; align-items: center; background: #263e60; color: white; border: 0; border-radius: 9px}
+.brand-copy {display: grid; gap: 1px}
+.brand-copy strong {font-size: 16px; line-height: 1.25}
+.brand-copy small {font-size: 11px; font-weight: 450; color: #586477}
+.workspace-sidebar .workspace-nav {flex: 1; gap: 17px; margin: 0; padding: 5px 0 20px}
+.nav-group {display: grid; gap: 2px}
+.nav-heading {margin: 0; padding: 5px 11px; font-size: 11px; font-weight: 600; color: #637083}
+.workspace-sidebar .workspace-nav a {position: relative; min-height: 37px; gap: 10px; padding: 0 11px; color: #465263; border-radius: 6px; border: 1px solid transparent; font-size: 13px}
+.workspace-sidebar .workspace-nav a:hover {background: #e9edf2; color: #172c49}
+.workspace-sidebar .workspace-nav a.active {background: #fff; color: #223d64; border-color: #d5dce6; font-weight: 600; box-shadow: 0 1px 2px #202e4510}
+.nav-count {margin-left: auto; min-width: 20px; padding: 0 5px; text-align: center; font-size: 11px; line-height: 19px; font-weight: 600; background: #dfe7f1; color: #3b536e; border-radius: 5px}
+.nav-toggle {display: flex; flex-shrink: 0; align-items: center; gap: 10px; height: 48px; padding: 0 11px; background: transparent; border: 0; border-top: 1px solid var(--line); color: #556275; font-size: 12px}
+.nav-toggle:hover {color: var(--primary); background: #e9edf2}
+.nav-toggle:focus-visible {outline: 2px solid var(--primary); outline-offset: -3px}
+.app-shell.collapsed .workspace-nav a {justify-content: center; padding: 0}
+.collapsed .nav-group + .nav-group {border-top: 1px solid var(--line); padding-top: 12px}
+.collapsed .nav-count {display: none}
+.workspace-location {display: flex; gap: 8px; align-items: center; font-size: 13px; color: #425167}
+.workspace-location svg, .workspace-location span:first-child {color: #657386}
+@media (min-width: 761px) {
+  .app-main > header {padding-inline: clamp(20px, 2.5vw, 38px)}
+  .app-shell:not(.discussion-mode) .app-main main {padding: 25px clamp(20px, 2.5vw, 38px)}
+}
+@media (max-width: 760px) {
+  .workspace-sidebar .workspace-nav a {padding: 0; justify-content: center; min-height: 42px}
+  .nav-heading, .nav-toggle, .workspace-sidebar .nav-count {display: none}
+  .nav-group + .nav-group {border-top: 1px solid var(--line); padding-top: 12px}
+  .workspace-location {gap: 4px; font-size: 12px}
+}
+.page-head {margin-bottom: 18px}
+.page-head h1 {font-size: clamp(21px, 2vw, 28px); font-weight: 700}
+.section-head h2 {color: #233b61}
+.app-main :is(a, button):focus-visible, aside a:focus-visible {outline: 3px solid #7397d6; outline-offset: 2px}
+.identity-card {
+  padding: clamp(16px, 2vw, 28px);
+  border: 1px solid #d9e0ea;
+  border-radius: 12px;
+  background: #f0f3f7;
+}
+.identity-avatar {background: #dfe6f0; color: #304665; border-radius: 12px}
+.identity-copy h2 {font-size: clamp(20px, 2vw, 26px); color: #26364b}
+.identity-facts {color: #485c79}
+.teaching-class-card {border-top: 2px solid #8295b2; background: #fff}
+.project-grid {gap: 16px}
+.project-card {
+  --folder-edge: #cedbf0;
+  --folder-tab: #e2ebfc;
+  --folder-ink: #315788;
+  position: relative;
+  margin-top: 30px;
+  padding: 16px;
+  border-color: var(--folder-edge);
+  border-radius: 0 13px 13px 13px;
+  background: linear-gradient(180deg, #f5f8fe, #fff 87px);
+  box-shadow: 0 3px 8px #162e5610;
+}
+.project-card.is-individual {
+  --folder-edge: #dcd6ec;
+  --folder-tab: #eee8fa;
+  --folder-ink: #634c8c;
+}
+.folder-tab {
+  position: absolute;
+  bottom: 100%;
+  left: -1px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 30px;
+  padding: 0 21px 0 12px;
+  border: 1px solid var(--folder-edge);
+  border-bottom: 0;
+  border-radius: 10px 22px 0 0;
+  background: var(--folder-tab);
+  color: var(--folder-ink);
+  font-size: 12px;
+  font-weight: 600;
+}
+.project-card:hover {box-shadow: 0 5px 14px #162e5618}
+.project-card:focus-within, .teaching-class-card:focus-within {border-color: var(--primary)}
+.project-card .card-title {font-size: 18px; font-weight: 700; text-align: left}
+.project-members {display: inline-flex; align-items: center; gap: 5px}
+.project-card .project-facts {padding: 10px 12px; background: #f3f6fb; border-radius: 8px}
+.project-card .project-facts > div {flex-wrap: wrap; gap: 2px 10px}
+.project-card .project-facts dd {overflow-wrap: anywhere}
+.project-card .el-progress-bar__outer {background: #e9effa}
+.project-card .el-progress-bar__inner {background: #4268ad}
+.project-card .card-bottom > a {min-height: 32px}
+.project-card .card-bottom > .muted {overflow-wrap: anywhere}
+.project-facts, .class-numbers {font-variant-numeric: tabular-nums}
+@media (max-width: 760px) {
+  .page-head {gap: 8px}
+}

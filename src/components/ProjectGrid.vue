@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import {computed,ref} from 'vue'
+import {Folder, UsersRound} from 'lucide-vue-next'
 import type {Project} from '../types'
 import {useStore} from '../store'
 
@@ -38,14 +39,17 @@ const cards = computed(() => props.projects.map(p => {
 <template>
   <template v-if="cards.length">
     <div class="project-grid">
-      <article v-for="card in cards" :key="card.p.id" class="project-card">
+      <article v-for="card in cards" :key="card.p.id" class="project-card" :class="{'is-individual': card.individual}">
+        <span class="folder-tab"><Folder :size="15" aria-hidden="true" />{{card.individual ? '个人项目' : '小组项目'}}</span>
         <div class="section-head">
           <Status :value="card.p.status" />
-          <span>{{card.individual?'个人项目':'小组项目 · '+card.p.memberIds.length+' 人'}}</span>
+          <span v-if="!card.individual" class="project-members">
+            <UsersRound :size="15" aria-hidden="true" />{{card.p.memberIds.length}} 位成员
+          </span>
         </div>
         <button v-if="teacher" class="text-button card-title" @click="show(card.p.id)">{{card.p.name}}</button><RouterLink v-else :to="card.link" class="card-title">{{card.p.name}}</RouterLink>
         <dl class="project-facts">
-          <div><dt>组长</dt><dd>{{card.leader}}</dd></div>
+          <div><dt>{{card.individual ? '负责人' : '组长'}}</dt><dd>{{card.leader}}</dd></div>
           <div><dt>开始</dt><dd>{{card.p.created.slice(0, 10)}}</dd></div>
           <div><dt>截止</dt><dd>{{card.deadline}}</dd></div>
         </dl>
