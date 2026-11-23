@@ -21,7 +21,7 @@ final class Seed {
     static String dt(int offset, String time) { return today().plusDays(offset) + "T" + time; }
 
     static ObjectNode create() {
-        ObjectNode s = o("version", Migrations.VERSION,
+        ObjectNode s = o("version", "3",
             "users", a(),
             "courses", a(o("id", "c1", "name", "Web 应用开发实训"), o("id", "c2", "name", "软件工程实践"), o("id", "c3", "name", "数据可视化")),
             "classes", a(

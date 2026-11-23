@@ -56,7 +56,7 @@ async function run(script) {
 let passed = false
 try {
   await start()
-  for (const script of ['verify-api', 'verify-discussion', 'verify-student-upgrade', 'verify-presentation']) await run(script)
+  for (const script of ['verify-library-notifications', 'verify-api', 'verify-discussion', 'verify-student-upgrade', 'verify-presentation']) await run(script)
   await stop()
   await start()
   await run('verify-persistence')

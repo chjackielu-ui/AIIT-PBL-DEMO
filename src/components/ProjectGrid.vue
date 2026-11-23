@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import Deadline from './Deadline.vue'
 import {computed,ref} from 'vue'
 import {Folder, UsersRound} from 'lucide-vue-next'
 import type {Project} from '../types'
@@ -51,7 +52,7 @@ const cards = computed(() => props.projects.map(p => {
         <dl class="project-facts">
           <div><dt>{{card.individual ? '负责人' : '组长'}}</dt><dd>{{card.leader}}</dd></div>
           <div><dt>开始</dt><dd>{{card.p.created.slice(0, 10)}}</dd></div>
-          <div><dt>截止</dt><dd>{{card.deadline}}</dd></div>
+          <div><dt>截止</dt><dd><Deadline :value="card.deadline" :remind="['进行中','结项待修改'].includes(card.p.status)" /></dd></div>
         </dl>
         <div class="project-progress"><span>完成进度</span><strong>{{card.progress}}%</strong></div>
         <el-progress :percentage="card.progress" :show-text="false" :stroke-width="6" />

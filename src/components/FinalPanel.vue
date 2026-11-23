@@ -1,10 +1,13 @@
 <script setup lang="ts">
+import MarkdownText from './MarkdownText.vue'
+import MarkdownInput from './MarkdownInput.vue'
 import {computed, reactive, ref} from 'vue'
 import {ElMessage} from 'element-plus'
+import AttachmentLink from './AttachmentLink.vue'
 import {useStore} from '../store'
 
 import type {FinalResult, Project} from '../types'
-import {run, safeLink, stamp, fileDownloadUrl} from '../lib'
+import {run, safeLink, stamp} from '../lib'
 import Status from './Status.vue'
 import DirectUpload from './DirectUpload.vue'
 import ReviewWorkbench from './ReviewWorkbench.vue'
@@ -101,11 +104,11 @@ const files = (ids: string[]) => props.project.files.filter(f => ids.includes(f.
     <section class="section">
       <div class="section-head"><h2>团队成果</h2><Status :value="project.status" /></div>
       <h3>项目总结</h3>
-      <p class="pre-wrap">{{project.final.summary}}</p>
+      <MarkdownText :text="project.final.summary" />
       <h3>最终成果说明</h3>
-      <p class="pre-wrap">{{project.final.description}}</p>
+      <MarkdownText :text="project.final.description" />
       <div class="actions wrap">
-        <a v-for="f in files(project.final.fileIds)" :key="f.id" :href="fileDownloadUrl(project.id, f.id)">{{f.name}}</a>
+        <AttachmentLink v-for="f in files(project.final.fileIds)" :key="f.id" :file="f" :url="`/api/projects/${project.id}/files/${f.id}`" />
       </div>
       <div class="result-images">
         <img v-for="f in files(project.final.imageIds)" :key="f.id" :src="`/api/projects/${project.id}/files/${f.id}`" :alt="f.name" />
@@ -113,7 +116,7 @@ const files = (ids: string[]) => props.project.files.filter(f => ids.includes(f.
       <a v-if="safeLink(project.final.link)" :href="safeLink(project.final.link)" target="_blank" rel="noopener noreferrer">打开外部作品链接</a>
       <div v-if="project.final.comment" class="feedback">
         <strong>教师意见</strong>
-        <p>{{project.final.comment}}</p>
+        <MarkdownText :text="project.final.comment" />
         <p class="muted" v-if="project.final.reviewTime">评分人：{{name(project.final.reviewerId || '')}} · {{stamp(project.final.reviewTime)}}</p>
       </div>
     </section>
@@ -125,7 +128,7 @@ const files = (ids: string[]) => props.project.files.filter(f => ids.includes(f.
           <tbody>
             <tr v-for="c in project.contributions" :key="c.userId">
               <td>{{name(c.userId)}}</td>
-              <td>{{c.role}}<p>{{c.description}}</p><small class="muted">佐证：{{c.evidence}}</small></td>
+              <td>{{c.role}}<MarkdownText :text="c.description" /><small class="muted">佐证：{{c.evidence}}</small></td>
               <td>{{c.percent}}%</td>
               <td>{{c.score == null ? '待确认' : `${c.score} 分`}}</td>
               <td>{{c.comment || '—'}}</td>
@@ -141,8 +144,8 @@ const files = (ids: string[]) => props.project.files.filter(f => ids.includes(f.
     <el-collapse-item title="历史结项提交记录">
       <article v-for="(record, i) in project.finalHistory" :key="i" class="phase-block">
         <strong>第 {{i + 1}} 次提交</strong>
-        <p>{{record.summary}}</p>
-        <p>{{record.comment || '已提交'}}</p>
+        <MarkdownText :text="record.summary" />
+        <MarkdownText :text="record.comment || '已提交'" />
       </article>
     </el-collapse-item>
   </el-collapse>
@@ -150,8 +153,8 @@ const files = (ids: string[]) => props.project.files.filter(f => ids.includes(f.
   <el-dialog :model-value="dialog && !grading" @close="dialog=false" title="提交结项材料" width="min(1000px,96vw)">
     <el-form label-position="top">
       <h2>成果材料</h2>
-      <el-form-item label="项目总结 / 项目介绍" required><el-input v-model="form.summary" type="textarea" :rows="3" /></el-form-item>
-      <el-form-item label="最终成果说明" required><el-input v-model="form.description" type="textarea" :rows="3" /></el-form-item>
+      <el-form-item label="项目总结 / 项目介绍" required><MarkdownInput v-model="form.summary" :rows="3" /></el-form-item>
+      <el-form-item label="最终成果说明" required><MarkdownInput v-model="form.description" :rows="3" /></el-form-item>
       <DirectUpload :project-id="project.id" @uploaded="f=>{if(f.type.startsWith('image/'))form.imageIds.push(f.id);else form.fileIds.push(f.id)}" />
       <div class="form-grid">
         <el-form-item :label="materialRequired ? (task?.startAt ? '最终附件（至少上传 1 个附件）' : '最终附件材料（含代码 / 压缩包）') : '最终附件材料（可选）'">
@@ -192,7 +195,7 @@ const files = (ids: string[]) => props.project.files.filter(f => ids.includes(f.
     </template>
   </el-dialog>
   <el-dialog v-model="returnDialog" title="退回结项材料" width="560px">
-    <el-input v-model="returnComment" type="textarea" :rows="4" placeholder="填写需要补充或修改的内容" />
+    <MarkdownInput v-model="returnComment" :rows="4" placeholder="填写需要补充或修改的内容" />
     <template #footer>
       <el-button @click="returnDialog = false">取消</el-button>
       <el-button type="primary" @click="reject">确认退回</el-button>

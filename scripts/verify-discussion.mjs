@@ -15,7 +15,7 @@ await student('/actions',{op:'message',projectId:'p1',text:'增加空值保护�
 state=await student('/state')
 assert.equal(state.projects.find(p=>p.id==='p1').messages.at(-1).codeName,'normalize.ts')
 assert(state.projects.find(p=>p.id==='p1').messages.some(m=>m.replyToId===msg.id))
-assert(state.notifications.some(n=>n.title.includes('提及') && n.path==='/student/discussions/p1'))
+assert(state.notifications.some(n=>n.title.includes('提及') && n.path.startsWith('/student/discussions/p1?message=')))
 assert.equal(await student(`/projects/p1/files/${after.id}`),'export function findItems(items, keyword = "") {\n  const query = keyword.trim().toLowerCase();\n  return items.filter(item => item.title.toLowerCase().includes(query));\n}\n')
 await student('/actions',{op:'message',projectId:'p1',text:''},400)
 await student('/actions',{op:'message',projectId:'p1',text:'错误附件',fileIds:['missing-file']},404)

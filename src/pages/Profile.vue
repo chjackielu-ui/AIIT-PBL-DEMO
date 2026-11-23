@@ -98,8 +98,8 @@ function removeAvatar() {
         <p class="profile-bio">{{user.bio || '还没有填写个性签名'}}</p>
       </div>
     </div>
-    <div class="actions profile-photo-actions">
-      <input ref="avatarInput" type="file" accept="image/jpeg,image/png" hidden @change="uploadAvatar">
+    <div v-file-drop class="actions profile-photo-actions" title="也可将 JPG 或 PNG 拖到这里更换头像">
+      <input ref="avatarInput" type="file" :disabled="uploading" accept="image/jpeg,image/png" hidden @change="uploadAvatar">
       <el-button :loading="uploading" @click="avatarInput?.click()"><Camera :size="16" />更换头像</el-button>
       <el-button v-if="user.avatarVersion" :disabled="uploading" @click="removeAvatar"><Trash2 :size="16" />移除头像</el-button>
     </div>

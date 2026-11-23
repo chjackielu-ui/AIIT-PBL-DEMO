@@ -48,7 +48,7 @@ function apply(){if(current.value && valid.value){const selected=rows.value.filt
   <el-button @click="opened=true">导入当前任务评分表</el-button>
   <el-dialog v-model="opened" title="导入当前任务评分表" width="min(1000px,94vw)" append-to-body>
     <p>每个项目的每项任务填写一位任课教师，采用 100 分制，权重填写 100%。</p>
-    <div class="actions wrap"><el-button @click="sample">下载评分样表</el-button><label class="upload-label">{{busy?'读取中…':'选择评分表'}}<input type="file" accept=".xlsx,.xls,.csv" :disabled="busy" @change="upload" /></label><span>{{filename}}</span></div>
+    <div class="actions wrap"><el-button @click="sample">下载评分样表</el-button><label v-file-drop class="upload-label">{{busy?'读取中…':'选择或拖入评分表'}}<input type="file" accept=".xlsx,.xls,.csv" :disabled="busy" @change="upload" /></label><span>{{filename}}</span></div>
     <el-alert title="表格仅填入当前项目、当前任务的评分；点击“通过并发布评分”或“通过并归档”后由服务器校验并保存。" type="info" :closable="false" show-icon />
     <el-table v-if="rows.length" :data="rows" max-height="320"><el-table-column prop="project" label="项目ID" min-width="140" /><el-table-column prop="task" label="任务名称" min-width="130" /><el-table-column prop="reviewer" label="评分人员" width="110" /><el-table-column prop="score" label="所评分数" width="95" /><el-table-column prop="weight" label="权重（%）" width="105" /><el-table-column prop="comment" label="备注" min-width="160" /></el-table>
     <p v-for="g in groups" :key="JSON.stringify([g.project,g.task])" :class="Math.abs(g.weight-100)<0.001?'success-text':'error-text'">{{g.project}} · {{g.task}}：权重合计 {{g.weight}}%，加权分数 {{g.score.toFixed(2)}}</p>

@@ -7,4 +7,5 @@ import 'highlight.js/styles/github.css'
 import './style.css'
 import App from './App.vue'
 import {router} from './router'
-createApp(App).use(createPinia()).use(router).use(ElementPlus,{locale:zhCn}).mount('#app')
+import {fileDrop} from './fileDrop'
+createApp(App).directive('file-drop',fileDrop).use(createPinia()).use(router).use(ElementPlus,{locale:zhCn}).mount('#app')

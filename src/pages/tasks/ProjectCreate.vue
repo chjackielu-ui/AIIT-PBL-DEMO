@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import MarkdownInput from '../../components/MarkdownInput.vue'
 import {computed, onMounted, reactive, ref} from 'vue'
 import {useRoute, useRouter} from 'vue-router'
 import type {FormInstance, FormRules} from 'element-plus'
@@ -62,19 +63,19 @@ async function createProject() {
     <el-alert v-else-if="deadlinePassed" :title="!taskStarted(task) ? '课程项目尚未开始' : '课程项目已截止，无法提交申请'" type="warning" :closable="false" />
     <el-form ref="projectRef" :model="projectForm" :rules="projectRules" label-position="top" class="section project-application" @submit.prevent="createProject">
       <el-form-item label="项目名称" prop="name"><el-input v-model="projectForm.name" maxlength="100" /></el-form-item>
-      <el-form-item label="项目简介" prop="description"><el-input v-model="projectForm.description" type="textarea" :rows="5" /></el-form-item>
+      <el-form-item label="项目简介" prop="description"><MarkdownInput v-model="projectForm.description" :rows="5" /></el-form-item>
       <div class="application-fields">
       <el-form-item label="技术与主题"><ProjectTopics v-model="projectForm.tags" /></el-form-item>
       <el-form-item v-if="!isIndividual(task)" label="项目成员（包含当前负责人）" required>
-        <el-select v-model="projectForm.memberIds" multiple filterable :disabled="!!alreadyJoined || deadlinePassed">
+        <el-select v-model="projectForm.memberIds" multiple filterable :multiple-limit="task.max" :disabled="!!alreadyJoined || deadlinePassed">
           <el-option v-for="u in available" :key="u.id" :value="u.id" :disabled="u.id === store.user?.id" :label="`${u.name} · ${className(u.classId || '')}`" />
         </el-select>
       </el-form-item>
       </div>
-      <p v-if="!isIndividual(task)" class="muted">负责人：{{store.user?.name}}。提交后成员自动加入，名单只能由教师调整。</p>
+      <p v-if="!isIndividual(task)" class="muted">负责人：{{store.user?.name}}。可选 {{task.min}}–{{task.max}} 人（含负责人）。</p>
       <div class="actions application-actions">
         <el-button @click="router.push(validOrigin(route.query.origin,'student') || '/student/tasks/' + task.id)">取消</el-button>
-        <el-button type="primary" native-type="submit" :loading="busy" :disabled="!!alreadyJoined || deadlinePassed">提交项目申请</el-button>
+        <el-button type="primary" native-type="submit" :loading="busy" :disabled="!!alreadyJoined || deadlinePassed || projectForm.memberIds.length<task.min || projectForm.memberIds.length>task.max">提交项目申请</el-button>
       </div>
     </el-form>
   </template>

@@ -1,10 +1,12 @@
 import type {Message, ProjectFile} from './types'
+import {isDocument} from './fileTypes'
 
 export function attachmentIds(m: Message): string[] {
   return [...new Set([...(m.fileIds || []), ...(m.fileId ? [m.fileId] : [])])]
 }
 
-export function isCodeFile(f: ProjectFile) {
+export function isCodeFile(f: Pick<ProjectFile,'name'|'type'|'sourceExtension'>) {
+  if (isDocument(f)) return false
   return /\.(js|jsx|ts|tsx|vue|java|py|css|scss|html|xml|json|md|txt|sql|yml|yaml|c|cpp|h|go|rs|sh|ps1|csv)$/i.test(f.name)
     || f.type.startsWith('text/') || f.type === 'application/json'
 }

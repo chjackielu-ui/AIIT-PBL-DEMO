@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import MarkdownInput from './MarkdownInput.vue'
 import {computed, reactive, ref, watch} from 'vue'
 import {useStore} from '../store'
 
@@ -53,7 +54,7 @@ async function decide(pass:boolean){
    <el-form label-position="top" @submit.prevent>
     <BulkScoreSheet v-if="pending && !milestone.rubric?.length" :project-id="project.id" :task-name="milestone.name" @apply="imported" />
     <ScoreEditor v-model="grade" :rubric="milestone.rubric" :readonly="!pending" teacher-only />
-    <el-form-item label="综合评语 / 打回原因" required><el-input v-model="form.comment" type="textarea" :rows="4" :disabled="!pending" /></el-form-item>
+    <el-form-item label="综合评语 / 打回原因" required><MarkdownInput v-model="form.comment" :rows="4" :disabled="!pending" /></el-form-item>
     <div v-if="pending" class="quick-comments"><small>快捷评语 · 点击追加</small><button type="button" v-for="q in quick" :key="q" @click="form.comment += (form.comment?'\n':'')+q">{{q}}</button></div>
     <template v-if="milestone.isFinal && final.contributions"><h3>成员贡献与个人评分</h3><div v-for="c in final.contributions" :key="c.userId" class="phase-form"><strong>{{store.state?.users.find(u=>u.id===c.userId)?.name}}</strong><p>{{c.role}} · {{c.description}}</p><el-form-item label="教师确认的贡献比例（合计 100%）"><el-input-number v-model="c.percent" :min="0" :max="100" :disabled="!pending" /></el-form-item><el-form-item label="个人成绩（教师评分）"><el-input-number v-model="c.score" :min="0" :max="100" :disabled="!pending" /></el-form-item><el-form-item label="个人评语"><el-input v-model="c.comment" :disabled="!pending" /><el-button v-if="pending" text @click="c.comment=form.comment">使用综合评语</el-button></el-form-item></div></template>
    </el-form>

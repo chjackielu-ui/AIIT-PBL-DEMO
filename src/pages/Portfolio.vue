@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import MarkdownText from '../components/MarkdownText.vue'
+import MarkdownInput from '../components/MarkdownInput.vue'
 import {computed, reactive, ref, onMounted} from 'vue'
 import {useRoute, useRouter} from 'vue-router'
 import {Plus, Download, Search} from 'lucide-vue-next'
@@ -75,11 +77,11 @@ async function remove(id: string) {
       <div class="section-head"><h2>项目经历</h2><Status :value="detail.status" /></div>
       <p>{{detail.date}} · {{detail.year}} 学年 · {{detail.role}}</p>
       <h3>个人职责</h3>
-      <p class="pre-wrap">{{detail.description}}</p>
+      <MarkdownText :text="detail.description" />
       <h3>个人贡献</h3>
       <p class="pre-wrap">{{detail.contribution}}</p>
       <h3>成果摘要</h3>
-      <p class="pre-wrap">{{detail.summary}}</p>
+      <MarkdownText :text="detail.summary" />
       <p v-if="detail.score != null">个人成绩：{{detail.score}} 分 · {{detail.comment}}</p>
       <p v-if="detail.history" class="muted">历史补录：本人填写，未经平台教师认证。</p>
       <el-button v-else @click="router.push('/student/projects/' + detail.id)">进入项目工作区</el-button>
@@ -112,7 +114,7 @@ async function remove(id: string) {
           <Status :value="r.status" />
         </div>
         <p>{{r.role}} · {{r.description}}</p>
-        <p class="muted">{{r.summary}}</p>
+        <MarkdownText class="muted" :text="r.summary" />
         <p v-if="r.history" class="muted">历史补录 · 未经教师认证</p>
         <p v-if="r.score != null">个人成绩 {{r.score}} 分 · {{r.comment}}</p>
         <el-button @click="router.push('/student/personal/' + r.id)">查看经历</el-button>
@@ -131,9 +133,9 @@ async function remove(id: string) {
         <el-form-item label="项目日期" required><el-date-picker v-model="form.date" type="date" value-format="YYYY-MM-DD" /></el-form-item>
         <el-form-item label="个人角色" required><el-input v-model="form.role" /></el-form-item>
       </div>
-      <el-form-item label="职责说明" required><el-input v-model="form.description" type="textarea" /></el-form-item>
-      <el-form-item label="个人贡献" required><el-input v-model="form.contribution" type="textarea" /></el-form-item>
-      <el-form-item label="成果摘要" required><el-input v-model="form.summary" type="textarea" /></el-form-item>
+      <el-form-item label="职责说明" required><MarkdownInput v-model="form.description" /></el-form-item>
+      <el-form-item label="个人贡献" required><MarkdownInput v-model="form.contribution" /></el-form-item>
+      <el-form-item label="成果摘要" required><MarkdownInput v-model="form.summary" /></el-form-item>
     </el-form>
     <template #footer>
       <el-button @click="dialog = false">取消</el-button>

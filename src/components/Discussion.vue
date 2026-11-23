@@ -7,11 +7,14 @@ import {useStore} from '../store'
 import {api, request} from '../api'
 import type {Message, Project, ProjectFile, User} from '../types'
 import {fileDownloadUrl, humanSize, roleName, run, stamp} from '../lib'
+import MarkdownText from './MarkdownText.vue'
 import {attachmentIds, codeLanguage, isCodeFile} from '../discussion'
 import CodeWorkbench from './CodeWorkbench.vue'
+import FilePreviewDialog from './FilePreviewDialog.vue'
+import {uploadProjectFile} from '../projectUploads'
 
 
-const props=withDefaults(defineProps<{project:Project;readonly:boolean;search?:string}>(),{search:''})
+const props=withDefaults(defineProps<{project:Project;readonly:boolean;search?:string;targetMessage?:string;targetCode?:string}>(),{search:''})
 const emit=defineEmits<{'clear-search':[]}>()
 const search=computed(()=>props.search)
 const inspectorOpen=ref(false), pinned=ref(false)
@@ -35,6 +38,8 @@ const list=ref<HTMLElement>(), uploadInput=ref<HTMLInputElement>(), codeInput=re
 const composer=ref<{textarea?:HTMLTextAreaElement}>()
 const synced=ref(true), syncing=ref(false)
 const filePreview=ref<ProjectFile>()
+const targetMessage=ref('')
+const allMembers = {id:'__all', name:'全体', role:undefined}
 const draftKey=`project-chat-draft:${store.user!.id}:${props.project.id}`
 try {const draft=JSON.parse(sessionStorage.getItem(draftKey) || '{}');text.value=draft.text || '';code.value=draft.code || '';codeName.value=draft.codeName || 'snippet.ts';language.value=draft.language || 'typescript';pendingIds.value=(draft.fileIds || []).filter((id:string)=>props.project.files.some(f=>f.id===id));replyToId.value=draft.replyToId || '';mentionIds.value=Array.isArray(draft.mentionIds)?draft.mentionIds:[]}catch{}
 watch([text,code,codeName,language,pendingIds,replyToId,mentionIds],()=>{
@@ -49,7 +54,8 @@ const members=computed(()=>{
 })
 const mentionOptions = computed(() => {
  const query = mention.value?.query.toLocaleLowerCase() ?? ''
- return members.value.filter(u=>u.id!==store.user?.id && [u.name,roleName[u.role]].some(v=>v.toLocaleLowerCase().includes(query)))
+ const people = members.value.filter(u=>u.id!==store.user?.id && u.name!=='全体' && [u.name,roleName[u.role]].some(v=>v.toLocaleLowerCase().includes(query)))
+ return ['全体','all','所有成员'].some(term=>term.includes(query)) ? [allMembers,...people] : people
 })
 const mentionListId = 'mentions-' + props.project.id
 const visibleMessages=computed(()=>props.project.messages.filter(m=>(m.text+' '+m.code+' '+m.codeName+' '+userName(m.userId)+' '+attachmentIds(m).map(id=>props.project.files.find(f=>f.id===id)?.name).join(' ')).toLowerCase().includes(search.value.toLowerCase())))
@@ -139,12 +145,12 @@ async function startMention() {
  await replaceText(start,input?.selectionEnd ?? start, start && !/\s/.test(text.value[start-1]) ? ' @' : '@')
  updateMention()
 }
-function insertMention(user:User) {
+function insertMention(user:User | typeof allMembers) {
  const range = mention.value
  if (!range) return
- const suffix = members.value.filter(member => member.name === user.name).length > 1 ? '（' + roleName[user.role] + '）' : ''
+ const suffix = user.role && members.value.filter(member => member.name === user.name).length > 1 ? '（' + roleName[user.role] + '）' : ''
  mention.value = undefined
- if (!mentionIds.value.includes(user.id)) mentionIds.value.push(user.id)
+ if (user.role && !mentionIds.value.includes(user.id)) mentionIds.value.push(user.id)
  void replaceText(range.start,range.end,'@' + user.name + suffix + ' ')
 }
 function composerKeys(event:KeyboardEvent) {
@@ -170,7 +176,8 @@ function composerKeys(event:KeyboardEvent) {
 function quote(m:Message){replyToId.value=m.id;nextTick(()=>composer.value?.textarea?.focus())}
 function jump(id:string){
  emit('clear-search')
- nextTick(()=>list.value?.querySelector(`[data-message-id="${id}"]`)?.scrollIntoView({behavior:'smooth',block:'center'}))
+ targetMessage.value=id
+ nextTick(()=>list.value?.querySelector(`[data-message-id="${CSS.escape(id)}"]`)?.scrollIntoView({behavior:'smooth',block:'center'}))
 }
 function attach(f:ProjectFile){
  if(props.readonly)return
@@ -191,9 +198,7 @@ async function upload(files:FileList|File[]){
  uploading.value=true
  await run(async()=>{
   for(const file of batch){
-   const data=new FormData();data.append('file',file)
-   data.append('category',file.type.startsWith('image/')?'图片':/\.(zip|rar|7z)$/i.test(file.name)?'压缩包':isCodeFile({name:file.name,type:file.type} as ProjectFile)?'代码':'文档')
-   const saved=await api<ProjectFile>(`/projects/${props.project.id}/files`,data)
+   const saved=await uploadProjectFile(props.project.id,file)
    // Keep completed uploads visible even if a later file fails.
    if(!props.project.files.some(f=>f.id===saved.id))props.project.files.push(saved)
    attach(saved)
@@ -256,7 +261,15 @@ async function sync(){
  finally{syncing.value=false}
 }
 let poll:ReturnType<typeof setInterval>
-onMounted(()=>{nextTick(scrollBottom);poll=setInterval(sync,4000)})
+function openTarget() {
+ if (props.targetMessage) jump(props.targetMessage)
+ else if (props.targetCode) {
+  const source=props.project.files.find(file=>file.id===props.targetCode)
+  if (source) openFile(source)
+ }
+}
+watch([()=>props.targetMessage,()=>props.targetCode], openTarget, {flush:'post'})
+onMounted(()=>{if(props.targetMessage || props.targetCode)openTarget();else nextTick(scrollBottom);poll=setInterval(sync,4000)})
 onBeforeUnmount(()=>{clearInterval(poll);codeRequest++})
 </script>
 
@@ -266,11 +279,11 @@ onBeforeUnmount(()=>{clearInterval(poll);codeRequest++})
   <div ref="list" class="channel-messages" aria-live="polite">
    <template v-for="(m,index) in visibleMessages" :key="m.id">
     <div v-if="shouldShowDate(index)" class="chat-date"><span>{{dateLabel(m.time)}}</span></div>
-    <article class="channel-message" :class="{mine:m.userId===store.user?.id}" :data-message-id="m.id">
+    <article class="channel-message" :class="{mine:m.userId===store.user?.id,'message-target':targetMessage===m.id}" :data-message-id="m.id">
      <span class="chat-avatar" :class="{teacher:store.state?.users.find(u=>u.id===m.userId)?.role==='teacher'}">{{userName(m.userId).slice(0,1)}}</span>
      <div class="channel-message-body"><div class="channel-message-meta"><strong>{{userName(m.userId)}}</strong><span v-if="store.state?.users.find(u=>u.id===m.userId)?.role==='teacher'" class="teacher-mark">教师</span><time :title="stamp(m.time)">{{timeLabel(m.time)}}</time><button v-if="!readonly" class="message-reply-button" aria-label="回复此消息" @click="quote(m)"><MessageSquareReply :size="14" /></button></div>
       <button v-if="replyOf(m)" class="quoted-message" @click="jump(m.replyToId!)"><MessageSquareReply :size="13" /><span>{{userName(replyOf(m)!.userId)}}：{{replyOf(m)!.text || replyOf(m)!.codeName || '文件附件'}}</span></button>
-      <p v-if="m.text" class="chat-message-text">{{m.text}}</p>
+      <MarkdownText v-if="m.text" class="chat-message-text" :text="m.text" />
       <div v-if="m.code" class="chat-code-card"><button class="chat-code-title" @click="openCode(m)"><Code2 :size="14" /><strong>{{m.codeName || '代码片段'}}</strong><span>{{m.codeLanguage || 'CODE'}}</span><ChevronRight :size="14" /></button><pre><code class="hljs" v-html="highlighted.get(m.id)" /></pre><div class="chat-code-actions"><button @click="openCode(m)">在代码区查看</button><button @click="compareCode(m)"><GitCompareArrows :size="13" />对比版本</button></div></div>
       <div v-if="filesOf(m).length" class="chat-attachments"><div v-for="f in filesOf(m)" :key="f.id" class="chat-file-card" draggable="true" @dragstart="dragFile($event,f)"><button @click="openFile(f)"><Code2 v-if="isCodeFile(f)" :size="20" /><Image v-else-if="f.type.startsWith('image/')" :size="20" /><FileText v-else :size="20" /><span><strong>{{f.name}}</strong><small>{{humanSize(f.size)}} · {{f.category}}</small></span></button><a :href="fileDownloadUrl(project.id,f.id)" :aria-label="'下载 '+f.name"><Download :size="15" /></a></div></div>
      </div>
@@ -285,7 +298,7 @@ onBeforeUnmount(()=>{clearInterval(poll);codeRequest++})
     <el-input ref="composer" v-model="text" type="textarea" :autosize="{minRows:3,maxRows:6}" placeholder="发送项目消息，或拖入代码、文档…" maxlength="10000" resize="none" aria-label="项目消息" :aria-controls="mention ? mentionListId : undefined" :aria-activedescendant="mention && mentionOptions.length ? mentionListId + '-' + highlightedMention : undefined" @input="updateMention" @compositionend="updateMention" @click="updateMention" @blur="mention=undefined" @keydown="composerKeys" />
     <div v-if="mention" :id="mentionListId" class="chat-mention-picker" role="listbox" aria-label="可提及的项目成员">
       <button v-for="(u,i) in mentionOptions" :id="mentionListId + '-' + i" :key="u.id" role="option" type="button" :aria-selected="i===highlightedMention" @mouseenter="highlightedMention=i" @mousedown.prevent @click="insertMention(u)">
-        <span>{{u.name}}</span><el-tag size="small" effect="plain" :type="u.role==='teacher' ? 'primary' : 'info'">{{roleName[u.role]}}</el-tag>
+        <span>{{u.role ? u.name : '@全体'}}</span><el-tag size="small" effect="plain" :type="u.role==='teacher' ? 'primary' : 'info'">{{u.role ? roleName[u.role] : '所有项目成员'}}</el-tag>
       </button>
       <small v-if="!mentionOptions.length" class="muted">没有匹配的项目成员</small>
     </div>
@@ -328,5 +341,5 @@ onBeforeUnmount(()=>{clearInterval(poll);codeRequest++})
 
  <el-dialog v-model="codeDialog" title="分享代码片段" width="min(760px, 94vw)" append-to-body><el-form label-position="top"><div class="form-grid"><el-form-item label="文件名"><el-input v-model="codeName" maxlength="180" placeholder="例如 src/main.ts" /></el-form-item><el-form-item label="代码语言"><el-select v-model="language"><el-option v-for="v in ['typescript','javascript','python','java','html','css','json','sql','cpp','go','rust','plaintext']" :key="v" :value="v" /></el-select></el-form-item></div><el-form-item label="代码内容"><el-input v-model="code" type="textarea" :rows="14" maxlength="50000" class="code-input" placeholder="粘贴代码，保留缩进。相同文件名的片段可在右侧对比版本。" /></el-form-item></el-form><template #footer><el-button @click="codeDialog=false">返回消息</el-button><el-button type="primary" @click="confirmSnippet">添加到消息</el-button></template></el-dialog>
  <el-dialog v-model="memberDialog" title="频道成员" width="min(420px, 94vw)" modal-class="channel-members-overlay" align-center append-to-body><div v-for="u in members" :key="u.id" class="list-row"><span>{{u.name}}</span><el-tag size="small">{{u.role==='teacher'?'任课教师':u.id===project.leaderId?'项目负责人':'项目成员'}}</el-tag></div></el-dialog>
- <el-dialog :model-value="!!filePreview" :title="filePreview?.name" width="min(900px, 94vw)" @close="filePreview=undefined"><div v-if="filePreview" class="chat-file-preview"><img v-if="filePreview.type.startsWith('image/')" :src="`/api/projects/${project.id}/files/${filePreview.id}`" :alt="filePreview.name" /><iframe v-else-if="filePreview.type==='application/pdf' || /\.pdf$/i.test(filePreview.name)" :src="`/api/projects/${project.id}/files/${filePreview.id}`" title="群文件预览" /><el-empty v-else description="此格式请下载后查看" :image-size="56" /><a :href="fileDownloadUrl(project.id,filePreview.id)">下载原文件</a></div></el-dialog>
+ <FilePreviewDialog :file="filePreview" :url="`/api/projects/${project.id}/files/${filePreview?.id || ''}`" @close="filePreview=undefined" />
 </template>

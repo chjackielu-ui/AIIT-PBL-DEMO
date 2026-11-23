@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import MarkdownText from './MarkdownText.vue'
 import {safeLink} from '../lib'
 
 interface ProjectDoc {
@@ -30,7 +31,7 @@ const link = safeLink(props.data.link || '')
     </div>
     <section>
       <h2>项目简介</h2>
-      <p class="pre-wrap">{{data.description}}</p>
+      <MarkdownText :text="data.description" />
     </section>
     <section>
       <h2>团队介绍</h2>
@@ -43,8 +44,8 @@ const link = safeLink(props.data.link || '')
     </section>
     <section v-if="data.summary">
       <h2>已审核最终成果</h2>
-      <p class="pre-wrap">{{data.summary}}</p>
-      <p class="pre-wrap">{{data.result}}</p>
+      <MarkdownText :text="data.summary" />
+      <MarkdownText :text="data.result" />
       <div class="public-images">
         <figure v-for="img in data.images" :key="img.id">
           <img :src="imageUrl(img.id)" :alt="img.name" />
@@ -53,7 +54,7 @@ const link = safeLink(props.data.link || '')
       </div>
       <a v-if="link" :href="link" target="_blank" rel="noopener noreferrer">外部作品链接</a>
       <h3 v-if="data.comment">教师评价</h3>
-      <p v-if="data.comment" class="pre-wrap">{{data.comment}}</p>
+      <MarkdownText v-if="data.comment" :text="data.comment" />
     </section>
     <p v-else class="muted">尚无审核通过的最终成果。</p>
   </article>

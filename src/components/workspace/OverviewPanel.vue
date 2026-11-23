@@ -2,7 +2,9 @@
 import {computed} from 'vue'
 import {useStore} from '../../store'
 import type {Project} from '../../types'
-import {fileDownloadUrl, stamp} from '../../lib'
+import Deadline from '../Deadline.vue'
+import AttachmentLink from '../AttachmentLink.vue'
+import {stamp} from '../../lib'
 import {projectDeadline, projectProgress,pendingSubmissions,projectPhases} from '../../projectPresentation'
 
 const props = defineProps<{project: Project}>()
@@ -17,7 +19,7 @@ const completed = computed(() => props.project.items.filter(i => i.status === '�
 const pendingReviews = computed(() => pendingSubmissions(props.project,projectPhases(task.value,props.project)).length)
 </script>
 <template>
-  <div class="dashboard-grid">
+  <div class="dashboard-grid project-overview">
     <section class="section">
       <h2>项目信息</h2>
       <div class="tags">
@@ -29,7 +31,7 @@ const pendingReviews = computed(() => pendingSubmissions(props.project,projectPh
         <div v-if="!teacher"><small>所属课程</small><span>{{s.courses.find(c => c.id === task?.courseId)?.name}}</span></div>
         <div v-if="!teacher"><small>教学班</small><span>{{s.teachingClasses.find(c => c.id === task?.classId)?.name}}</span></div>
         <div><small>开始时间</small><span>{{project.created.slice(0, 10)}}</span></div>
-        <div><small>截止时间</small><span>{{projectDeadline(s, project)}}</span></div>
+        <div><small>截止时间</small><Deadline :value="projectDeadline(s, project)" :remind="['进行中','结项待修改'].includes(project.status)" /></div>
       </div>
     </section>
     <section class="section">
@@ -50,10 +52,9 @@ const pendingReviews = computed(() => pendingSubmissions(props.project,projectPh
     </div>
     <div v-for="f in project.files.slice(0, 3)" :key="f.id" class="list-row">
       <div>
-        <button class="text-button" @click="emit('goto', 'files')">{{f.name}}</button>
+        <AttachmentLink :file="f" :url="`/api/projects/${project.id}/files/${f.id}`" />
         <p class="muted">{{f.category}} · {{userName(f.userId)}} · {{stamp(f.time)}}</p>
       </div>
-      <a :href="fileDownloadUrl(project.id, f.id)">下载</a>
     </div>
     <el-empty v-if="!project.files.length" description="当前项目尚未上传资料" :image-size="56" />
   </section>
@@ -70,3 +71,6 @@ const pendingReviews = computed(() => pendingSubmissions(props.project,projectPh
   </section>
   </div>
 </template>
+<style scoped>
+.project-overview{align-items:start;gap:12px}.project-overview>.section{padding:14px;min-height:0;margin:0}.project-overview .details-grid{gap:8px 14px}.project-overview .details-grid>div{display:flex;align-items:baseline;gap:6px;flex-wrap:wrap}.project-overview .details-grid small{margin:0}.project-overview .list-row,.project-overview .progress-summary{padding-block:5px;margin:0}.project-overview h2{margin-bottom:8px}
+</style>

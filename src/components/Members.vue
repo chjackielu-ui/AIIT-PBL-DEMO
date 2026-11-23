@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import MarkdownInput from './MarkdownInput.vue'
 import {computed, reactive, ref} from 'vue'
 import {useStore} from '../store'
 
@@ -42,12 +43,12 @@ const userName = (id: string) => s.value.users.find(u => u.id === id)?.name || i
       </template>
     </el-table-column>
   </el-table>
-  <p class="muted">贡献比例仅在最终验收提交时由提交成员填写，提交后由教师确认；审核中不可修改。成员名单提交后仅教师可调整。</p>
+  <p class="muted">贡献比例仅在最终验收提交时由提交成员填写，提交后由教师确认；审核中不可修改。</p>
   <el-dialog v-model="dialog" title="我的职责与个人贡献" width="600px">
     <el-form label-position="top">
       <el-form-item label="职责" required><el-input v-model="form.role" /></el-form-item>
-      <el-form-item label="个人贡献说明" required><el-input v-model="form.description" type="textarea" :rows="4" /></el-form-item>
-      <el-form-item label="佐证材料 / 文件说明" required><el-input v-model="form.evidence" type="textarea" /></el-form-item>
+      <el-form-item label="个人贡献说明" required><MarkdownInput v-model="form.description" :rows="4" /></el-form-item>
+      <el-form-item label="佐证材料 / 文件说明" required><MarkdownInput v-model="form.evidence" /></el-form-item>
     </el-form>
     <template #footer>
       <el-button @click="dialog = false">取消</el-button>

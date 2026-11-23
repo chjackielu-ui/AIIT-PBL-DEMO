@@ -214,10 +214,10 @@ async function confirmImport() {
       </div>
       <p class="muted">名称按“专业简称 + 年级 + 班序”填写，如软件2403。学号采用类似 {{studentNumberExample}} 的 10 位示例；账号导入时学号与行政班标识需逐行填写，模板示例仅作格式参考。</p>
     </div>
-    <div class="toolbar">
+    <div v-file-drop class="toolbar">
       <el-button @click="template"><Download :size="16" />模板与示例</el-button>
-      <el-button type="primary" :loading="busy" @click="input?.click()"><Upload :size="16" />选择 Excel 文件</el-button>
-      <input ref="input" type="file" accept=".xlsx,.xls" hidden @change="parse" />
+      <el-button type="primary" :loading="busy" @click="input?.click()"><Upload :size="16" />选择或拖入 Excel 文件</el-button>
+      <input ref="input" type="file" :disabled="busy" accept=".xlsx,.xls" hidden @change="parse" />
       <span class="muted">{{filename || '.xlsx / .xls，最大 5 MB，最多 1000 行'}}</span>
     </div>
     <p class="muted">按“行政班 → 账号 → 课程 → 教学班 → 选课关系”准备依赖数据。角色值为 student 或 teacher；教师标识用逗号分隔。</p>

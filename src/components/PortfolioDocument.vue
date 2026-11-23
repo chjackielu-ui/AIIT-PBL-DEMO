@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import MarkdownText from './MarkdownText.vue'
 import type {PortfolioRecord} from '../projectPresentation'
 
 defineProps<{records: PortfolioRecord[]; name: string; adminClass?: string}>()
@@ -18,7 +19,7 @@ defineProps<{records: PortfolioRecord[]; name: string; adminClass?: string}>()
       <h3>个人职责与贡献</h3>
       <p class="pre-wrap">{{r.description || '尚未填写'}}{{r.history ? ' ' + r.contribution : ''}}</p>
       <h3>成果摘要</h3>
-      <p class="pre-wrap">{{r.summary}}</p>
+      <MarkdownText :text="r.summary" />
       <p v-if="r.score != null">教师确认成绩：{{r.score}} 分 · {{r.comment}}</p>
     </section>
     <p v-if="!records.length">暂无项目经历。</p>

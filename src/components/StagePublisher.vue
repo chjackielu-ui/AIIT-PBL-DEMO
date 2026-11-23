@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import MarkdownText from './MarkdownText.vue'
+import MarkdownInput from './MarkdownInput.vue'
 import {computed, reactive, ref} from 'vue'
 import {CalendarClock, ClipboardCheck, Flag, Plus} from 'lucide-vue-next'
 import type {FormInstance, FormRules} from 'element-plus'
@@ -75,7 +77,7 @@ function remove(m: Milestone) {
                 <span><CalendarClock :size="14" aria-hidden="true" />截止 {{stamp(m.due)}}</span>
                 <span v-if="m.parentId">上级阶段：{{published.find(node=>node.id===m.parentId)?.name}}</span>
               </div>
-              <p v-if="m.description" class="pre-wrap stage-description">{{m.description}}</p>
+              <MarkdownText v-if="m.description" class=" stage-description" :text="m.description" />
             </div>
             <div v-if="(task.status !== '已关闭' || project) && (!m.isFinal || !scheduled)" class="stage-actions">
               <el-button size="small" @click="open(m)">修改任务</el-button>
@@ -95,7 +97,7 @@ function remove(m: Milestone) {
           <el-option v-for="node in published.filter(m => !m.isFinal && m.id !== form.id)" :key="node.id" :label="node.name" :value="node.id" />
         </el-select>
       </el-form-item>
-      <el-form-item label="任务说明" prop="description"><el-input v-model="form.description" type="textarea" :rows="3" /></el-form-item>
+      <el-form-item label="任务说明" prop="description"><MarkdownInput v-model="form.description" :rows="3" /></el-form-item>
       <el-form-item label="截止时间" prop="due"><el-date-picker v-if="scheduled" v-model="form.due" type="datetime" format="YYYY-MM-DD HH:mm" value-format="YYYY-MM-DDTHH:mm" /><el-date-picker v-else v-model="form.due" value-format="YYYY-MM-DD" /></el-form-item>
       <el-form-item v-if="!scheduled" label="需要提交并验收"><el-switch v-model="form.requiresSubmission" :disabled="form.isFinal || hasSubmissions(form.id)" /></el-form-item>
       <el-form-item v-if="form.requiresSubmission" label="成员提交方式"><el-radio-group v-model="form.submissionMode" :disabled="form.isFinal || hasSubmissions(form.id)"><el-radio-button value="shared">由负责人统一提交</el-radio-button><el-radio-button value="individual">成员分别提交</el-radio-button></el-radio-group></el-form-item>
@@ -107,7 +109,7 @@ function remove(m: Milestone) {
         <el-form-item label="验收标准" prop="criteria"><el-input v-model="form.criteria" /></el-form-item>
       </template>
       <el-form-item label="任务成绩权重"><el-input-number v-model="form.scoreWeight" :min="0.01" :max="100" :precision="2" /><small class="muted">各任务按权重占比汇总；全部为 1 时等权。</small></el-form-item><RubricEditor v-model="form.rubric" />
-      <el-form-item label="特殊评分规则说明（可选）"><el-input v-model="form.scoringRule" type="textarea" placeholder="例如：按验收标准检查实现、测试和材料完整性" /></el-form-item>
+      <el-form-item label="特殊评分规则说明（可选）"><MarkdownInput v-model="form.scoringRule" placeholder="例如：按验收标准检查实现、测试和材料完整性" /></el-form-item>
     </el-form>
     <template #footer><el-button @click="opened=false">取消</el-button><el-button type="primary" :loading="busy" @click="save">{{changing?'保存修改':'发布任务'}}</el-button></template>
   </el-dialog>

@@ -8,6 +8,7 @@ import {latestTerm, semesters} from '../academic'
 import {teachingClasses, taskPath, classPath, intentPath} from '../teacher'
 import PageHead from '../components/PageHead.vue'
 import Status from '../components/Status.vue'
+import Deadline from '../components/Deadline.vue'
 
 const store = useStore()
 const s = computed(() => store.state!)
@@ -51,7 +52,7 @@ function clear() {
   <PageHead title="实训任务总表">
     <el-button type="primary" @click="$router.push(intentPath('publish'))"><Plus :size="16" />发布教学任务</el-button>
   </PageHead>
-  <div class="toolbar">
+  <div class="toolbar task-register-filters">
     <el-select v-model="year" aria-label="学年">
       <el-option v-for="y in [...new Set(classes.map(c => c.academicYear))].sort().reverse()" :key="y" :value="y" />
     </el-select>
@@ -73,7 +74,7 @@ function clear() {
     </el-select>
     <span class="muted">共 {{rows.length}} 项</span>
   </div>
-  <el-table :data="rows" class="task-register-table">
+  <el-table :data="rows" class="task-register-table" size="small">
     <el-table-column label="发布内容" min-width="250">
       <template #default="{row: t}">
         <RouterLink :to="taskPath(t.classId, t.id)" class="strong">{{t.name}}</RouterLink>
@@ -89,7 +90,7 @@ function clear() {
     <el-table-column label="状态" width="110">
       <template #default="{row: t}"><Status :value="t.status" /></template>
     </el-table-column>
-    <el-table-column prop="due" label="截止日期" width="120" />
+    <el-table-column label="截止日期" min-width="155"><template #default="{row}"><Deadline :value="row.due" /></template></el-table-column>
     <el-table-column label="作答 / 申请" min-width="150">
       <template #default="{row: t}">
         <span v-if="t.taskKind==='exercise'">{{projects(t.id).filter(p=>p.submissions.length).length}} 人已作答</span>
@@ -105,3 +106,9 @@ function clear() {
     </template>
   </el-table>
 </template>
+
+<style scoped>
+.task-register-filters{gap:8px;margin-bottom:10px}
+.task-register-table :deep(.el-table__cell){padding-block:5px}
+.task-register-table :deep(.el-button){height:28px}
+</style>

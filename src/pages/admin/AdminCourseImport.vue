@@ -130,9 +130,9 @@ async function commit() {
     <p v-if="mode === 'course'" class="muted">先在账号管理导入教师。填写教师账号、课程状态、计划时间和评分规则，一行创建一个小学期教学班。</p>
     <p v-else class="muted">先导入课程与教学班，再选择教务名单原表。学生按软件教学班工作表归班。</p>
     <p v-if="mode === 'course' && teachers.length" class="muted">教师账号 {{teachers.map(t => t.id + '（' + t.name + '）').join('、')}}</p>
-    <div class="toolbar">
-      <el-button type="primary" :loading="busy" @click="fileInput?.click()">选择 Excel 并预览</el-button>
-      <input ref="fileInput" type="file" hidden accept=".xlsx,.xls" @change="choose" />
+    <div v-file-drop class="toolbar">
+      <el-button type="primary" :loading="busy" @click="fileInput?.click()">选择或拖入 Excel</el-button>
+      <input ref="fileInput" type="file" :disabled="busy" hidden accept=".xlsx,.xls" @change="choose" />
       <el-button v-if="preview.length" :disabled="errors > 0 || busy" @click="commit">确认导入 {{preview.length}} 行</el-button>
     </div>
     <p v-if="count !== undefined" class="success-text">已新增 {{count}} {{mode === 'course' ? '个课程与教学班' : '条选课关系'}}</p>

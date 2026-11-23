@@ -55,6 +55,13 @@ final class TaskSchedule {
         }
     }
 
+    static boolean dueSoon(String due) {
+        try {
+            LocalDateTime end=parse(due,true), now=LocalDateTime.now(ZONE);
+            return !end.isBefore(now) && !end.isAfter(now.plusDays(3));
+        } catch (DateTimeParseException e) { return false; }
+    }
+
     static Boolean onTime(String submitted, String due) {
         try {
             return !parse(submitted, false).isAfter(parse(due, true));

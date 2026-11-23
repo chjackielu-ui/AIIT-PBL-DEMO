@@ -1,8 +1,8 @@
 <script setup lang="ts">
+import Deadline from '../../components/Deadline.vue'
 import {computed, ref,watch} from 'vue'
 import {useRoute, useRouter} from 'vue-router'
 import {Plus, Search} from 'lucide-vue-next'
-import {stamp} from '../../lib'
 import {isIndividual,taskModeName,canStartTask,taskStarted} from '../../taskMode'
 import type {CourseTask} from '../../types'
 import {useStore} from '../../store'
@@ -12,6 +12,7 @@ import PageHead from '../../components/PageHead.vue'
 import TermFilter from '../../components/TermFilter.vue'
 import Status from '../../components/Status.vue'
 import TeacherContext from '../../components/TeacherContext.vue'
+import TopicForum from '../../components/TopicForum.vue'
 import CourseDetails from '../CourseDetails.vue'
 import ClassScores from '../../components/ClassScores.vue'
 import ClassRoster from '../../components/ClassRoster.vue'
@@ -30,9 +31,9 @@ const semester = ref(term.semester)
 const query = ref('')
 const status = ref('')
 const page = ref(1)
-const module=ref(['resources','grading','roster'].includes(String(route.query.module))?String(route.query.module):'tasks')
-watch(()=>route.query.module,value=>{module.value=['resources','grading','roster'].includes(String(value))?String(value):'tasks'})
-watch(module,value=>{if(teacher.value && route.query.module!==value)router.replace({query:{...route.query,module:value}})})
+const module=ref(['resources','grading','roster','topics'].includes(String(route.query.module))?String(route.query.module):'tasks')
+watch(()=>route.query.module,value=>{module.value=['resources','grading','roster','topics'].includes(String(value))?String(value):'tasks'})
+watch(module,value=>{if((teacher.value || selectedClass.value) && route.query.module!==value)router.replace({query:{...route.query,module:value}})})
 const sort = ref('due')
 const createdFilter=ref(''), modeFilter=ref(''), kindFilter=ref('')
 const joined=(id:string)=>s.value.projects.find(p=>p.taskId===id && p.memberIds.includes(store.user!.id))
@@ -45,7 +46,7 @@ const taskLink = (id: string) => teacher.value ? taskPath(String(route.params.cl
 const filtered = computed(() => s.value.tasks.filter(t =>
   (teacher.value
     ? t.classId === tc.value?.id
-    : t.status === '已发布' && relevantClasses(s.value).some(c => c.id === t.classId && c.academicYear === year.value && c.semester === semester.value))
+    : t.status === '已发布' && relevantClasses(s.value).some(c => c.id === t.classId && (selectedClass.value || c.academicYear === year.value && c.semester === semester.value)))
   && (!route.query.classId || t.classId === route.query.classId)
   && (!kindFilter.value || (t.taskKind || 'training')===kindFilter.value)
   && (!modeFilter.value || (isIndividual(t)?'individual':'group')===modeFilter.value)
@@ -69,10 +70,10 @@ function resetPage() { page.value = 1 }
       </template>
     </PageHead>
     <div v-if="!teacher && selectedClass" class="section-head"><h2>{{s.courses.find(c=>c.id===selectedClass!.courseId)?.name}} · {{selectedClass.name}}</h2><el-button @click="router.push('/student/classes/'+selectedClass.id+'/details')">课程说明与规则</el-button></div>
-    <el-tabs v-if="teacher" v-model="module" class="class-module-tabs"><el-tab-pane name="tasks" label="任务中心" /><el-tab-pane name="roster" label="班级学生" /><el-tab-pane name="resources" label="资料库" /><el-tab-pane name="grading" label="班级评分与评分细则" /></el-tabs>
-    <div v-if="!teacher || module==='tasks'" class="toolbar" :class="{'class-task-toolbar':teacher}">
-      <template v-if="!teacher || module==='tasks'">
-      <TermFilter v-if="!teacher" :classes="relevantClasses(s)" v-model:year="year" v-model:semester="semester" />
+    <el-tabs v-if="teacher || selectedClass" v-model="module" class="class-module-tabs"><el-tab-pane name="tasks" label="任务中心" /><el-tab-pane v-if="teacher" name="roster" label="班级学生" /><el-tab-pane name="resources" label="资料库" /><el-tab-pane name="topics" label="话题讨论" /><el-tab-pane v-if="teacher" name="grading" label="班级评分与评分细则" /></el-tabs>
+    <div v-if="(!teacher && !selectedClass) || module==='tasks'" class="toolbar" :class="{'class-task-toolbar':teacher}">
+      <template v-if="(!teacher && !selectedClass) || module==='tasks'">
+      <TermFilter v-if="!teacher && !selectedClass" :classes="relevantClasses(s)" v-model:year="year" v-model:semester="semester" />
       <el-input v-model="query" placeholder="搜索任务" clearable @input="resetPage">
         <template #prefix><Search :size="16" /></template>
       </el-input>
@@ -80,16 +81,16 @@ function resetPage() { page.value = 1 }
       <el-select v-if="teacher" v-model="status" clearable placeholder="全部状态" @change="resetPage">
         <el-option v-for="v in ['草稿', '已发布', '已关闭']" :key="v" :value="v" />
       </el-select>
-      <el-select v-if="!teacher" v-model="createdFilter" clearable placeholder="项目创建状态" @change="resetPage"><el-option value="created" label="已创建" /><el-option value="uncreated" label="未创建" /></el-select>
-      <el-select v-model="modeFilter" clearable placeholder="项目类型" @change="resetPage"><el-option value="individual" label="个人项目" /><el-option value="group" label="小组集体项目" /></el-select>
+      <el-select v-if="!teacher && !selectedClass" v-model="createdFilter" clearable placeholder="项目创建状态" @change="resetPage"><el-option value="created" label="已创建" /><el-option value="uncreated" label="未创建" /></el-select>
+      <el-select v-if="!selectedClass" v-model="modeFilter" clearable placeholder="项目类型" @change="resetPage"><el-option value="individual" label="个人项目" /><el-option value="group" label="小组集体项目" /></el-select>
       <el-select v-model="sort" aria-label="任务排序" @change="resetPage">
         <el-option value="due" label="截止时间排序" />
         <el-option value="name" label="任务名称排序" />
       </el-select>
       </template>
     </div>
-    <template v-if="!teacher || module==='tasks'"><p class="muted">共 {{filtered.length}} 项任务</p>
-    <div class="training-task-list">
+    <template v-if="(!teacher && !selectedClass) || module==='tasks'"><p class="muted task-result-count">共 {{filtered.length}} 项任务</p>
+    <div class="training-task-list" :class="{'teacher-task-center':teacher,'student-task-center':!teacher}">
       <article v-for="t in filtered.slice((page - 1) * 8, page * 8)" :key="t.id" class="training-task-row">
         <div class="task-main">
           <RouterLink :to="taskLink(t.id)" class="card-title">{{t.name}}</RouterLink>
@@ -97,9 +98,10 @@ function resetPage() { page.value = 1 }
           <div class="task-row-facts">
             <span>{{taskModeName(t)}} · {{isIndividual(t)?'每人独立提交':t.min+'–'+t.max+' 人，按阶段要求提交'}}</span>
             <span>{{t.taskKind==='exercise'?'班级任务':'课程项目 · '+t.milestones.length+' 个共用阶段'}}</span>
-            <span>截止 {{stamp(t.due)}}</span>
+            <span v-if="!teacher" class="task-deadline">截止 <Deadline :value="t.due" /></span>
           </div>
         </div>
+        <Deadline v-if="teacher" :value="t.due" />
         <span v-if="teacher" class="muted">已创建 {{createdCount(t)}} {{isIndividual(t)?'/ '+rosterCount(t)+' 人':'组'}}</span>
         <el-tag v-else :type="joined(t.id)?'success':'info'">{{joined(t.id)?'已创建':'未创建'}}</el-tag>
         <Status :value="t.status" />
@@ -112,8 +114,23 @@ function resetPage() { page.value = 1 }
     <el-pagination v-if="filtered.length > 8" v-model:current-page="page" :page-size="8" :total="filtered.length" layout="prev,pager,next" />
 
     </template>
-    <CourseDetails v-if="teacher && module==='resources'" :key="String(route.params.classId)+'resources'" embedded panel="resources" />
+    <TopicForum v-if="(tc || selectedClass) && module==='topics'" :key="(tc || selectedClass)!.id" :tc="(tc || selectedClass)!" />
+    <CourseDetails v-if="(teacher || selectedClass) && module==='resources'" :key="(tc || selectedClass)?.id" :target-class="(tc || selectedClass)?.id" embedded panel="resources" />
     <template v-if="teacher && tc && module==='grading'"><CourseDetails :key="tc.id+'rules'" embedded panel="rules" /><ClassScores :class-id="tc.id" /></template>
     <ClassRoster v-if="teacher && tc && module==='roster'" :class-id="tc.id" />
   </template>
 </template>
+
+<style scoped>
+.class-task-toolbar{margin-block:6px 8px;gap:8px}
+.task-result-count{margin:6px 0 8px;font-size:12px}
+.teacher-task-center{gap:0;border:1px solid var(--line);border-radius:9px;background:#fff;overflow:hidden}
+.teacher-task-center:empty{border:0}
+.teacher-task-center .training-task-row{padding:8px 12px;gap:10px;border:0;border-radius:0}
+.teacher-task-center .training-task-row + .training-task-row{border-top:1px solid var(--line)}
+.teacher-task-center .training-task-row .card-title{font-size:14px}
+.teacher-task-center .task-row-facts{margin-top:3px;gap:4px 10px;font-size:11px}
+.teacher-task-center .el-button{height:28px;padding-inline:9px;font-size:12px}
+.task-deadline{display:inline-flex;align-items:flex-start;gap:4px}
+@media(max-width:700px){.teacher-task-center .training-task-row{gap:6px 9px}.teacher-task-center .task-main{flex-basis:100%}}
+.student-task-center{gap:6px}.student-task-center .training-task-row{padding:10px 12px;gap:8px}.student-task-center p{margin:3px 0}.task-deadline{font-weight:600;white-space:nowrap;align-items:baseline}</style>

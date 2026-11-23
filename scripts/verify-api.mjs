@@ -72,7 +72,7 @@ await teacher('/login',{id:'t2'});assert(!(await teacher('/state')).projects.som
 await teacher('/login',{id:'t1'})
 const classBody={name:'接口验证班 '+base,courseId:'c3',academicYear:'2027-2028',semester:'第二学期',studentIds:['s1','s2']}
 await action(student,'createTeachingClass',classBody,403)
-await action(teacher,'createTeachingClass',{...classBody,semester:'第三学期'},400)
+await action(teacher,'createTeachingClass',{...classBody,semester:'第四学期'},400)
 const classId=(await action(teacher,'createTeachingClass',classBody)).id
 await action(teacher,'createTeachingClass',classBody,400)
 const createdClass=(await teacher('/state')).teachingClasses.find(c=>c.id===classId)

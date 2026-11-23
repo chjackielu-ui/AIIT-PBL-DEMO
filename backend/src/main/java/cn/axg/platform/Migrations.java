@@ -16,7 +16,7 @@ import java.time.ZoneId;
 final class Migrations {
 
     /** 当前数据版本；state.version 落后于它时才执行对应迁移。 */
-    static final String VERSION = "3";
+    static final String VERSION = "4";
     static final String THIRD_TERM = "第三学期";
 
     static String currentVersion(ObjectNode state) {
@@ -62,6 +62,17 @@ final class Migrations {
         if (currentVersion(state).equals("2")) {
             for (JsonNode tc : list(state, "teachingClasses")) {
                 if (str(tc, "semester").equals("小学期")) ((ObjectNode) tc).put("semester", THIRD_TERM);
+            }
+            state.put("version", "3");
+            changed = true;
+        }
+        if (currentVersion(state).equals("3")) {
+            for (JsonNode project : list(state, "projects")) {
+                ProjectFolders.migrate((ObjectNode) project);
+                if (project.path("activity") instanceof ArrayNode activity) {
+                    for (int i = activity.size() - 1; i >= 0; i--)
+                        if (str(activity.get(i), "text").equals("发布项目讨论")) activity.remove(i);
+                }
             }
             state.put("version", VERSION);
             changed = true;

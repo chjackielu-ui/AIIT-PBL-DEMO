@@ -367,6 +367,9 @@ public class PlatformService {
     public synchronized ObjectNode view(String uid) {
         ObjectNode u = user(uid);
         ObjectNode result = state.deepCopy();
+        result.remove("libraries");
+        ObjectNode personalLibrary = library(uid).deepCopy();
+        result.set("library", personalLibrary);
         ObjectNode self = safeAccount(u);
         try {
             Path avatar = avatarPath(uid);
@@ -375,7 +378,9 @@ public class PlatformService {
             // An unavailable avatar must not prevent loading the workspace.
         }
         result.set("user", self);
-        ((ObjectNode) result.get("user")).remove("sessionVersion");
+        self.remove(List.of("sessionVersion", "notificationPreferences", "mutedDiscussions"));
+        result.set("notificationPreferences", u.path("notificationPreferences").isObject() ? u.path("notificationPreferences").deepCopy() : o());
+        result.set("mutedDiscussions", u.path("mutedDiscussions").isObject() ? u.path("mutedDiscussions").deepCopy() : o());
         if (mysql) {
             ArrayNode users = a();
             for (JsonNode account : list("users")) {
@@ -397,6 +402,15 @@ public class PlatformService {
             if (!exists) visibleTasks.add(t.deepCopy());
         }
         result.set("projects", filtered(list("projects"), p -> canProject(u, p)));
+        // These roots belong to projects. Expose them in the directory view only:
+        // personal-folder mutations can never rename or remove a project root.
+        if (role(u).equals("student")) {
+            for (JsonNode project : result.path("projects")) {
+                String projectId = str(project,"id");
+                personalLibrary.withArray("folders").add(o("id","project:"+projectId,
+                    "parentId","","name",str(project,"name"),"projectId",projectId));
+            }
+        }
         result.set("notifications", filtered(list("notifications"), n -> str(n, "userId").equals(uid)));
         result.set("history", filtered(list("history"), n -> str(n, "userId").equals(uid)));
         if (role(u).equals("teacher")) {
@@ -435,7 +449,11 @@ public class PlatformService {
             for (JsonNode n : result.path("users"))
                 if (!str(n, "id").equals(uid) && !roster.contains(str(n,"id"))) ((ObjectNode) n).remove(List.of("number","contact"));
         }
+        for (JsonNode account : result.path("users"))
+            ((ObjectNode) account).remove(List.of("notificationPreferences", "mutedDiscussions"));
         for(JsonNode tc:result.path("teachingClasses"))((ObjectNode)tc).remove(List.of("courseScores","inviteToken"));
+        for (JsonNode cls : result.path("teachingClasses"))
+            if (role(u).equals("student") && !enrolled(uid,str(cls,"id"))) ((ObjectNode)cls).remove(List.of("topics","resources","syllabus"));
         result.set("courseGrades",CourseGrading.grades(this,u));
         for (JsonNode p : result.path("projects"))
             for (JsonNode f : p.path("files")) ((ObjectNode) f).remove("seedText");
@@ -448,7 +466,34 @@ public class PlatformService {
         ((ArrayNode) p.get("activity")).insert(0, o("text", text, "userId", str(u, "id"), "time", now()));
     }
     void notice(String uid, String title, String body, String path) {
-        list("notifications").insert(0, o("id", id(), "userId", uid, "title", title, "text", body, "path", path, "read", false, "time", now()));
+        notice(uid, title, body, path, "system");
+    }
+    void notice(String uid, String title, String body, String path, String type) {
+        list("notifications").insert(0, o("id", id(), "userId", uid, "title", title, "text", body, "path", path,
+            "type", type, "read", false, "time", now()));
+    }
+    public synchronized ArrayNode notifications(String uid) throws IOException {
+        if(role(user(uid)).equals("student")) {
+            ArrayNode notices=list("notifications");
+            Set<String> sent=new HashSet<>();
+            for(JsonNode n:notices) if(str(n,"userId").equals(uid) && n.has("deadlineKey")) sent.add(str(n,"deadlineKey"));
+            int initial=notices.size();
+            try {
+                for(JsonNode p:list("projects")) {
+                    if(!contains(p.path("memberIds"),uid) || !Set.of("进行中","结项待修改").contains(str(p,"status"))) continue;
+                    ObjectNode task=find("tasks",str(p,"taskId"));
+                    if(exercise(task) || !str(task,"status").equals("已发布")) continue;
+                    String due=projectPhases(task,p).stream().filter(m->m.path("isFinal").asBoolean()).map(m->str(m,"due")).findFirst().orElse(str(task,"due"));
+                    String key=str(p,"id")+"@"+due;
+                    if(TaskSchedule.dueSoon(due) && sent.add(key)) {
+                        notice(uid,"项目即将截止",str(p,"name")+" · 截止 "+due.replace('T',' '),"/student/projects/"+str(p,"id"));
+                        ((ObjectNode)notices.get(0)).put("deadlineKey",key);
+                    }
+                }
+                if(notices.size()!=initial) save();
+            } catch(IOException | RuntimeException e) { while(notices.size()>initial) notices.remove(0);throw e; }
+        }
+        return filtered(list("notifications"), n -> str(n, "userId").equals(uid));
     }
     void notifyMembers(ObjectNode p, String title, String body) {
         for (JsonNode member : p.path("memberIds")) notice(member.asText(), title, body, "/student/projects/" + str(p, "id"));
@@ -644,7 +689,7 @@ public class PlatformService {
             case "reviewProject", "batchReviewProjects", "reopen" -> "projectReview";
             case "reviewPhase", "reviewFinal" -> "assessment";
             case "saveCourseGrades", "saveCourseDetails" -> "courseGrades";
-            case "editFile" -> "projectFiles";
+            case "editFile", "createFolder", "renameFolder", "deleteFolder", "moveFile" -> "projectFiles";
             case "message" -> "discussion";
             case "importClassStudents", "addClassStudents", "addClassStudent", "removeClassStudent",
                 "resetClassStudentPassword", "createClassInvite" -> "roster";
@@ -654,6 +699,17 @@ public class PlatformService {
         if (!permission.isEmpty()) permit(u, permission);
         ObjectNode result = o("ok", true);
         switch (op) {
+        case "personalFolder", "personalEdit", "distributeFiles", "classDownload", "publishTopic", "replyTopic" ->
+            result = CourseLibrary.change(this, u, b);
+        case "copyPersonalToProject" -> {
+            ObjectNode target=project(u,pid);
+            permit(u,"projectFiles");
+            editable(u,target);
+            ObjectNode source=selectedLibraryFile(uid,str(b,"fileId"),str(b,"sourceProjectId"));
+            source.put("folderId","").remove("downloadable");
+            if (target.path("files").valueStream().noneMatch(v -> str(v,"id").equals(str(source,"id")))) target.withArray("files").add(source);
+            result=source;
+        }
         case "importCourses" -> {
             only(u, "admin");
             result = CourseImport.process(this, b.path("rows"), true);
@@ -725,12 +781,23 @@ public class PlatformService {
             result.put("classId",str(tc,"id"));
         }
         case "importClassStudents" -> result=ClassEnrollment.apply(this,u,str(b,"classId"),b.path("rows"));
+        case "createFolder", "renameFolder", "deleteFolder", "moveFile" -> {
+            ObjectNode p = project(u, pid);
+            editable(u, p);
+            result = ProjectFolders.change(this, p, b);
+        }
+        case "setNotificationPreference" -> ProjectNotifications.preference(u, b);
+        case "setDiscussionMute" -> {
+            project(u, pid);
+            ProjectNotifications.mute(u, pid, b);
+        }
         case "editFile" -> {
             ObjectNode p = project(u, pid); editable(u, p);
             ObjectNode f = nested(p, "files", str(b, "fileId"));
             require(role(u).equals("teacher") || str(f, "userId").equals(uid), "只能编辑自己上传的资料");
             text(b, "name");
             require(List.of("文档", "图片", "代码", "压缩包", "其他").contains(str(b, "category")), "文件类别无效");
+            if (!f.has("sourceExtension")) f.put("sourceExtension", DocumentPreview.extension(str(f, "name")));
             f.put("name", str(b, "name")); f.put("category", str(b, "category")); activity(p, u, "编辑资料：" + str(f, "name"));
         }
         case "createTeachingClass" -> {
@@ -821,6 +888,7 @@ public class PlatformService {
             ObjectNode tc = find("teachingClasses", str(t, "classId"));
             require(contains(tc.path("teacherIds"), uid), "只能向自己的教学班发布任务");
             require(str(tc, "courseId").equals(str(t, "courseId")), "课程与教学班不匹配");
+            CourseLibrary.taskReferences(this,u,t);
             String kind=t.path("taskKind").asText("training");
             require(List.of("training","exercise").contains(kind),"课程任务形式无效");
             ObjectNode previous = str(t, "id").isBlank() ? null : find("tasks", str(t, "id"));
@@ -834,15 +902,16 @@ public class PlatformService {
                     && list("projects").valueStream().anyMatch(p -> str(p, "taskId").equals(str(t, "id")));
                 if (!exercise(t) && !existingPersonalProject) {
                     t.put("projectType", "group");
-                    require(t.path("min").asInt() >= 2, "小组项目至少需要两名成员");
+                    long roster = list("enrollments").valueStream().filter(e -> str(e,"classId").equals(str(tc,"id"))).count();
+                    require(str(t,"status").equals("已关闭") || t.path("max").asInt() <= roster, "小组人数上限不能超过班级人数");
                 }
             }
             if (exercise(t)) t.put("projectType", "individual");
             if (!t.hasNonNull("projectType")) t.put("projectType", individual(t) ? "individual" : "group");
             require(List.of("individual", "group").contains(str(t, "projectType")), "请选择个人项目或小组项目");
             if (individual(t)) { t.put("min", 1); t.put("max", 1); t.put("crossClass", false); }
-            require(t.path("min").asInt() >= 1 && t.path("max").asInt() >= t.path("min").asInt() && t.path("max").asInt() <= 20,
-                "组队人数需为 1–20 且上限不小于下限");
+            require(t.path("min").asInt() >= 1 && t.path("max").asInt() >= t.path("min").asInt(),
+                "组队人数至少为 1，上限不能小于下限");
             require(t.path("milestones").isArray(), "任务列表格式无效");
             ensureFinal(t);
             int finals = validatePhases(t.path("milestones"));
@@ -1035,25 +1104,14 @@ public class PlatformService {
             require(uniqueFiles.size() <= 10, "每条消息最多附带 10 个文件");
             for (String fid : uniqueFiles) { nested(p, "files", fid); attachments.add(fid); }
             require(!str(b, "text").isBlank() || !str(b, "code").isBlank() || !attachments.isEmpty(), "请输入消息、代码或添加附件");
-            if (!str(b, "replyToId").isBlank()) nested(p, "messages", str(b, "replyToId"));
+            ObjectNode reply = str(b, "replyToId").isBlank() ? null : nested(p, "messages", str(b, "replyToId"));
             require(str(b, "codeName").length() <= 180 && str(b, "codeLanguage").length() <= 40, "代码名称或语言过长");
-            ((ArrayNode) p.get("messages")).add(o("id", id(), "userId", uid, "text", str(b, "text"),
+            ObjectNode message = o("id", id(), "userId", uid, "text", str(b, "text"),
                 "code", str(b, "code"), "codeName", str(b, "codeName"), "codeLanguage", str(b, "codeLanguage"),
                 "fileId", attachments.isEmpty() ? "" : attachments.get(0).asText(), "fileIds", attachments,
-                "replyToId", str(b, "replyToId"), "time", now()));
-            Set<String> mentioned = new HashSet<>();
-            JsonNode selected = b.path("mentionIds");
-            require(selected.isMissingNode() || selected.isArray() && selected.size() <= 100, "提及成员列表无效");
-            for (JsonNode person : list("users")) {
-                String recipient = str(person, "id");
-                if (recipient.equals(uid) || role(person).equals("admin") || !person.path("enabled").asBoolean()) continue;
-                if (selected.isArray() && !contains(selected, recipient)) continue;
-                if (canProject(person, p) && str(b, "text").contains("@" + str(person, "name"))) mentioned.add(recipient);
-            }
-            for (String recipient : mentioned)
-                notice(recipient, str(u, "name") + " 在项目讨论中提及你", str(b, "text"),
-                    "/" + role(find("users", recipient)) + "/discussions/" + pid);
-            activity(p, u, "发布项目讨论");
+                "replyToId", str(b, "replyToId"), "time", now());
+            ((ArrayNode) p.get("messages")).add(message);
+            ProjectNotifications.discussion(this, u, p, message, b.path("mentionIds"), reply, !str(b, "code").isBlank());
         }
         case "submitPhase" -> {
             ObjectNode p = project(u, pid);
@@ -1351,16 +1409,18 @@ public class PlatformService {
     }
 
     // —— 文件 ——
-    public synchronized ObjectNode upload(String uid, String pid, String category, MultipartFile file) throws IOException {
+    public synchronized ObjectNode upload(String uid, String pid, String category, String folderId, MultipartFile file) throws IOException {
         ObjectNode u = user(uid), p = project(u, pid);
         permit(u, "projectFiles");
         editable(u, p);
+        ProjectFolders.checkTarget(this, p, folderId);
         require(file.getSize() > 0 && file.getSize() <= 20 * 1024 * 1024, "文件大小应为 1 字节至 20 MB");
         require(List.of("文档", "图片", "代码", "压缩包", "其他").contains(category), "文件类别无效");
         String fid = id();
         String filename = Optional.ofNullable(file.getOriginalFilename()).orElse("未命名文件").replaceAll("[\\\\/\\r\\n]", "_");
         Path target = repository.file(fid, uid);
-        ObjectNode meta = o("id", fid, "name", filename, "category", category, "size", file.getSize(),
+        ObjectNode meta = o("id", fid, "name", filename, "sourceExtension", DocumentPreview.extension(filename),
+            "folderId", folderId, "category", category, "size", file.getSize(),
             "type", Optional.ofNullable(file.getContentType()).orElse("application/octet-stream"),
             "userId", uid, "time", now());
         ObjectNode before = state.deepCopy();
@@ -1369,6 +1429,7 @@ public class PlatformService {
             file.transferTo(target);
             ((ArrayNode) p.get("files")).add(meta);
             activity(p, u, "上传资料：" + filename);
+            ProjectNotifications.upload(this, u, p, meta);
             save();
             return meta;
         } catch (IOException | RuntimeException e) {
@@ -1390,16 +1451,51 @@ public class PlatformService {
         require(role(u).equals("admin") || (role(u).equals("teacher") ? contains(tc.path("teacherIds"), uid) : enrolled(uid, cid)), "无教学班访问权限");
         return tc;
     }
+    ObjectNode library(String uid) {
+        ObjectNode all = state.withObject("/libraries");
+        if (!all.has(uid)) all.set(uid,CourseLibrary.create(role(user(uid))));
+        return (ObjectNode)all.get(uid);
+    }
+    ObjectNode selectedLibraryFile(String uid,String fid,String projectId) {
+        if(projectId.isBlank()) return libraryFile(uid,fid);
+        only(user(uid),"student");
+        return fileMeta(uid,projectId,fid);
+    }
+    public synchronized ObjectNode libraryFile(String uid, String fid) {
+        user(uid);
+        return nested(library(uid),"files",fid).deepCopy();
+    }
+    public synchronized ObjectNode taskFile(String uid,String tid,String fid) {
+        ObjectNode t=find("tasks",tid);
+        require(canTask(user(uid),t),"无任务访问权限");
+        return nested(t,"references",fid).deepCopy();
+    }
+    public synchronized ObjectNode topicFile(String uid,String cid,String topicId,String postId,String fid) {
+        ObjectNode topic=nested(accessibleClass(uid,cid),"topics",topicId);
+        return nested(postId.equals("topic") ? topic : nested(topic,"replies",postId),"files",fid).deepCopy();
+    }
     public synchronized ObjectNode classFile(String uid, String cid, String fid) {
         ObjectNode tc = accessibleClass(uid, cid);
         if (str(tc.path("syllabus"), "id").equals(fid)) return ((ObjectNode) tc.get("syllabus")).deepCopy();
         return nested(tc, "resources", fid).deepCopy();
     }
-    public synchronized ObjectNode classUpload(String uid, String cid, String category, MultipartFile file) throws IOException {
-        ObjectNode tc = accessibleClass(uid, cid), u = user(uid);
-        only(u, "teacher");
-        permit(u, "courseFiles");
-        require(List.of("syllabus", "reference").contains(category), "资料类型无效");
+    public synchronized boolean studentAccount(String uid) { return role(user(uid)).equals("student"); }
+    public synchronized ObjectNode personalUpload(String uid,String folder,String category,boolean downloadable,MultipartFile file) throws IOException {
+        ObjectNode lib=library(uid);
+        ProjectFolders.checkTarget(this,lib,folder);
+        return storeLibraryUpload(uid,lib,"files",category,folder,downloadable,file);
+    }
+    public synchronized ObjectNode classUpload(String uid,String cid,String category,MultipartFile file) throws IOException {
+        return classUpload(uid,cid,category,true,file);
+    }
+    public synchronized ObjectNode classUpload(String uid,String cid,String category,boolean downloadable,MultipartFile file) throws IOException {
+        ObjectNode tc=accessibleClass(uid,cid), u=user(uid);
+        only(u,"teacher");
+        permit(u,"courseFiles");
+        require(List.of("syllabus","reference").contains(category),"资料类型无效");
+        return storeLibraryUpload(uid,tc,category.equals("syllabus")?"syllabus":"resources",category,"",downloadable,file);
+    }
+    private ObjectNode storeLibraryUpload(String uid,ObjectNode collection,String field,String category,String folder,boolean downloadable,MultipartFile file) throws IOException {
         require(file.getSize() > 0 && file.getSize() <= 20 * 1024 * 1024, "文件大小应为 1 字节至 20 MB");
         String fid = id(); Path target = repository.file(fid, uid);
         ObjectNode meta = o("id", fid, "name", Optional.ofNullable(file.getOriginalFilename()).orElse("未命名"), "category", category,
@@ -1408,19 +1504,25 @@ public class PlatformService {
         try {
             Files.createDirectories(target.getParent());
             file.transferTo(target);
-            if (category.equals("syllabus")) tc.set("syllabus", meta);
-            else { if (!tc.has("resources")) tc.set("resources", a()); ((ArrayNode)tc.get("resources")).add(meta); }
-            for (JsonNode e : list("enrollments")) if (str(e, "classId").equals(cid))
-                notice(str(e, "studentId"), category.equals("syllabus") ? "课程大纲已更新" : "新增课程参考资料", str(meta, "name"), "/student/classes/" + cid + "/resources");
-            save(); return meta;
-        } catch (IOException | RuntimeException e) { state = before; Files.deleteIfExists(target); throw e; }
+            meta.put("folderId",folder).put("downloadable",downloadable);
+            if (field.equals("syllabus")) collection.set(field,meta);
+            else collection.withArray(field).add(meta);
+            if (!field.equals("files")) {
+                library(uid).withArray("files").add(meta.deepCopy());
+                String cid=str(collection,"id");
+                for(JsonNode e:list("enrollments")) if(str(e,"classId").equals(cid))
+                    ProjectNotifications.courseUpload(this,str(e,"studentId"),"课程资料已更新",str(meta,"name"),cid);
+            }
+            save();
+            return meta;
+        } catch (IOException | RuntimeException e) { state=before; Files.deleteIfExists(target); throw e; }
     }
 
     public synchronized ObjectNode fileMeta(String uid, String pid, String fid) {
         return nested(project(user(uid), pid), "files", fid).deepCopy();
     }
 
-    public synchronized byte[] fileBytes(ObjectNode f) throws IOException {
+    public byte[] fileBytes(ObjectNode f) throws IOException {
         if (f.has("seedText")) return str(f, "seedText").getBytes(StandardCharsets.UTF_8);
         return Files.readAllBytes(repository.file(str(f, "id"), str(f,"userId")));
     }

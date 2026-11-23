@@ -46,6 +46,7 @@ export const router = createRouter({
           return store.user ? `/${store.user.role}/dashboard` : '/login'
         }},
         // —— 学生端 ——
+        {path: 'teacher/library', component: () => import('./pages/StudentLibrary.vue'), meta:{role:'teacher'}},
         {path: 'student/library', component: () => import('./pages/StudentLibrary.vue'), meta:{role:'student'}},
         {path: 'student/dashboard', component: Dashboard, meta: {role: 'student'}},
         {path: 'student/learning', redirect: {path:'/student/personal',query:{tab:'learning'}}},

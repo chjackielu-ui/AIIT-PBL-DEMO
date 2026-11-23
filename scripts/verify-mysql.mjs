@@ -62,7 +62,7 @@ await action(teacher,'createTeachingClass',{},403)
 console.log('PASS 课程与教学班批量预览、提交原子性、重复校验、名单复用和未提交成绩留空')
 
 const task = {name:'教师大任务',description:'根任务',classId:course.id,courseId:course.id,startAt:'2000-01-01T00:00',
-  due:'2099-11-04T23:59',projectType:'group',min:2,max:5,status:'已发布',milestones:[
+  due:'2099-11-04T23:59',projectType:'group',min:1,max:2,status:'已发布',milestones:[
     {id:'root',name:'准备',description:'准备',due:'2099-11-02',criteria:'完整',requiresSubmission:false},
     {id:'phase',parentId:'root',name:'阶段验收',description:'提交',due:'2099-11-03',criteria:'达标',requireMaterials:false},
     {id:'final',name:'最终验收',description:'结项',due:'2099-11-05',criteria:'达标',requireMaterials:false,isFinal:true},
@@ -78,6 +78,7 @@ await action(otherTeacher,'resetClassStudentPassword',{classId:course.id,student
 await action(teacher,'resetClassStudentPassword',{classId:course.id,studentId:rosterMemberId,password:'Reset-2026'})
 await login(rosterMember,'9900000100','student','Reset-2026')
 await action(student,'saveTask',{task},403)
+await action(teacher,'saveTask',{task:{...task,max:3}},400)
 const taskId = (await action(teacher,'saveTask',{task})).id
 state = await student('/state')
 const studentId = state.user.id

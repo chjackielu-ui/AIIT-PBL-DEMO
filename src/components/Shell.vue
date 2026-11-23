@@ -8,6 +8,7 @@ import {roleName, run} from '../lib'
 import {validOrigin} from '../navigation'
 import {pendingSubmissionCount} from '../projectPresentation'
 import AccountAvatar from './AccountAvatar.vue'
+import NotificationBell from './NotificationBell.vue'
 
 
 const store = useStore()
@@ -22,6 +23,7 @@ const menuGroups = computed(() => {
   const roleMenus: MenuItem[] = role === 'teacher'
     ? [
         {name: '实训班级', path: '/teacher/classes', icon: Users},
+        {name:'资料库',path:'/teacher/library',icon:Library},
         {name: '实训任务总表', path: '/teacher/task-register', icon: ClipboardList},
         {name: '项目申请与审核', path: '/teacher/reviews/projects', icon: CheckSquare, match: p => p.startsWith('/teacher/reviews/projects')},
         {name: '成果审核与评分', path: '/teacher/reviews/achievements', icon: GraduationCap},
@@ -101,9 +103,7 @@ const currentArea = computed(() => route.path === '/profile' ? '个人主页' : 
           <template v-if="currentArea"><ChevronRight :size="13" aria-hidden="true" /><span>{{currentArea}}</span></template>
         </div>
         <div class="actions">
-          <RouterLink to="/notifications" class="icon-button" aria-label="通知中心">
-            <Bell :size="20" /><span v-if="unread" class="dot" />
-          </RouterLink>
+          <NotificationBell />
           <el-dropdown>
             <button class="user-button"><AccountAvatar :user="store.user" :size="30" />{{store.user.name}}<span class="muted">{{roleName[store.user.role]}}</span></button>
             <template #dropdown>

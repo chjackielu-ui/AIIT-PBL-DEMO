@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import MarkdownText from '../components/MarkdownText.vue'
+import MarkdownInput from '../components/MarkdownInput.vue'
 import {computed, reactive, ref, watch} from 'vue'
 import {useRoute, useRouter} from 'vue-router'
 import {ArrowLeft, Download, Share2} from 'lucide-vue-next'
@@ -151,7 +153,7 @@ async function saveEdit() {
         : '项目已关闭。'}}
       <span v-if="p.reviewComment"> 教师意见：{{p.reviewComment}}</span>
     </div>
-    <section class="section project-persistent-description"><h2>项目说明</h2><p class="pre-wrap">{{p.description}}</p><el-collapse v-if="task"><el-collapse-item title="课程任务说明"><p class="pre-wrap">{{task.description}}</p><ProjectScores :project="p" :task="task" /></el-collapse-item></el-collapse></section>
+    <section class="section project-persistent-description"><h2>项目说明</h2><MarkdownText :text="p.description" /><el-collapse v-if="task"><el-collapse-item title="课程任务说明"><MarkdownText :text="task.description" /><ProjectScores :project="p" :task="task" /></el-collapse-item></el-collapse></section>
     <el-tabs :model-value="tab" class="workspace-tabs" @tab-change="(name: unknown) => setTab(String(name))">
       <el-tab-pane v-for="t in tabs" :key="t.id" :name="t.id"><template #label>{{t.name}}<span v-if="t.id==='board' && pending" class="pending-count">{{pending}}</span></template></el-tab-pane>
     </el-tabs>
@@ -176,7 +178,7 @@ async function saveEdit() {
     <el-dialog v-model="editing" title="修改项目申请" width="min(640px,94vw)">
       <el-form label-position="top">
         <el-form-item label="项目名称" required><el-input v-model="edit.name" /></el-form-item>
-        <el-form-item label="项目简介" required><el-input v-model="edit.description" type="textarea" :rows="3" /></el-form-item>
+        <el-form-item label="项目简介" required><MarkdownInput v-model="edit.description" :rows="3" /></el-form-item>
         <el-form-item label="技术与主题"><ProjectTopics v-model="edit.tags" /></el-form-item>
       </el-form>
       <template #footer>

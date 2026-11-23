@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import MarkdownText from './MarkdownText.vue'
 import {computed} from 'vue'
 import {useStore} from '../store'
 
@@ -15,7 +16,7 @@ const name=(id:string)=>store.state?.users.find(u=>u.id===id)?.name || id
 </script>
 <template>
  <el-dialog v-model="open" :title="application?'项目申请详情':'项目简介与完成情况'" width="min(680px,94vw)" destroy-on-close>
-  <template v-if="project"><div class="section-head"><h2>{{project.name}}</h2><Status :value="project.status" /></div><p class="muted">{{task?.name}}</p><p class="pre-wrap">{{project.description}}</p>
+  <template v-if="project"><div class="section-head"><h2>{{project.name}}</h2><Status :value="project.status" /></div><p class="muted">{{task?.name}}</p><MarkdownText :text="project.description" />
    <div class="project-preview-facts"><span>负责人：{{name(project.leaderId)}}</span><span>{{application?'申请时间':'创建时间'}}：{{project.created}}</span><span>组员：{{project.memberIds.map(name).join('、')}}</span></div>
    <h3>完成情况</h3><el-progress :percentage="projectProgress(store.state!,project)" :stroke-width="7" /><div class="project-preview-phases"><div v-for="m in phases" :key="m.id"><span>{{m.name}}</span><Status :value="phaseStatus(project,m)" /></div></div><p v-if="!phases.length" class="muted">教师尚未发布子任务。</p>
    <p v-if="application && project.reviewComment" class="feedback">审核意见：{{project.reviewComment}}</p><ProjectDecisionBar v-if="application" :project="project" inline />

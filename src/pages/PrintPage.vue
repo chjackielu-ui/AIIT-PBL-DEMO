@@ -5,6 +5,7 @@ import {Printer, ArrowLeft, Layers} from 'lucide-vue-next'
 import {useStore} from '../store'
 
 import {projectPresentation, portfolioRecords} from '../projectPresentation'
+import {downloadMarkdown} from '../markdown'
 import ProjectDocument from '../components/ProjectDocument.vue'
 import PortfolioDocument from '../components/PortfolioDocument.vue'
 
@@ -29,6 +30,18 @@ const docTitle = computed(() => {
   return projectData.value ? `项目介绍_${projectData.value.name}` : '项目介绍'
 })
 
+function exportMd(){
+  const d=projectData.value
+  const sections=d ? [
+   '# '+d.name,[d.course,d.teachingClass,d.created,d.status,d.tags].filter(Boolean).join(' · '),
+   '## 项目简介',d.description,'## 项目成员',d.members.map(m=>'- '+m.name+' · '+m.role).join('\n'),
+   d.summary && '## 已审核最终成果',d.summary,d.result,d.link,d.comment && '## 教师评价',d.comment,
+   ...d.images.map(img=>'['+img.name+']('+location.origin+'/api/projects/'+p.value!.id+'/files/'+img.id+')')
+  ] : ['# '+(u.value?.name || '')+'的项目履历',...portfolio.value.flatMap(r=>[
+   '## '+r.name,[r.course,r.teachingClass,r.role,r.date].filter(Boolean).join(' · '),r.description,r.contribution,r.summary,r.score!=null?'成绩：'+r.score:'',r.comment
+  ])]
+  downloadMarkdown(docTitle.value,sections.filter(Boolean).join('\n\n'))
+}
 async function print() {
   if (!projectData.value && kind.value === 'project') {
     const {ElMessage} = await import('element-plus')
@@ -50,6 +63,7 @@ async function print() {
       <span class="actions"><Layers :size="20" />安信工项目管理平台 <span class="muted">/ 打印预览</span></span>
       <div class="actions">
         <el-button @click="router.back()"><ArrowLeft :size="16" />返回</el-button>
+        <el-button v-if="projectData || kind==='portfolio'" @click="exportMd">导出 Markdown</el-button>
         <el-button type="primary" :loading="busy" @click="print"><Printer :size="16" />打印 / 保存为 PDF</el-button>
       </div>
     </div>

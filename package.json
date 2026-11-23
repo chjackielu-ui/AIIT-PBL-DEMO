@@ -14,11 +14,14 @@
     "highlight.js": "^11.11.1",
     "lucide-vue-next": "^0.468.0",
     "monaco-editor": "^0.57.0",
+    "pdfjs-dist": "^6.5.438",
     "pinia": "^3.0.3",
     "qrcode": "^1.5.4",
     "vue": "^3.5.22",
     "vue-router": "^4.6.3",
-    "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz"
+    "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz",
+    "marked": "14.0.0",
+    "dompurify": "3.4.17"
   },
   "devDependencies": {
     "@types/node": "^22.18.0",
