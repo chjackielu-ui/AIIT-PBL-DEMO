@@ -89,16 +89,12 @@ export function pendingTaskCount(s:State,p:Project,userId?:string) {
   return pendingSubmissionCount(s,p,userId)+p.items.filter(i=>i.status!=='已完成' && (!userId || i.ownerId===userId)).length
 }
 
-/** 最终验收阶段的状态徽章（与 phaseStatus 的 final 分支一致，供无 Milestone 对象的场景使用）。 */
-export function finalStageStatus(p: Project): string {
-  if (p.status === '结项待审核') return '待验收'
-  if (p.status === '结项待修改') return '退回修改'
-  if (p.final?.approved) return '已通过'
-  return '未提交'
-}
+export const projectDevelopmentStatuses = ['进行中', '结项待修改', '结项待审核']
 
-/** 项目协作只读状态集合（申请锁定 / 退回修改 / 归档 / 关闭）。 */
-export const lockedStatuses = ['待审核', '待修改', '已归档', '已关闭'] as const
+export function projectMembers(s: State, project: Project) {
+  return project.memberIds.map(id => id === s.user.id ? s.user :
+    s.users.find(user => user.id === id) || {id, name:'项目成员', role:'student' as const, enabled:false})
+}
 
 /** 项目展示模型：打印页与公开分享页共用同一组白名单字段（与后端 publicProject 对齐）。 */
 export function projectPresentation(s: State, p: Project) {
@@ -128,8 +124,10 @@ export interface PortfolioRecord {
   id: string
   name: string
   year: string
+  semester?: string
   date: string
   course: string
+  courseId?: string
   teachingClass: string
   role: string
   description: string
@@ -144,16 +142,19 @@ export interface PortfolioRecord {
 /** 个人档案记录：项目经历（职责取 contribution.role、贡献取 description，与成员表的字段语义一致）
  *  与历史补录合并，按日期倒序。档案页与打印页共用。 */
 export function portfolioRecords(s: State, userId: string): PortfolioRecord[] {
-  const projects = s.projects.filter(p => s.tasks.find(t => t.id === p.taskId)?.taskKind !== 'exercise').map(p => {
+  const taskById = new Map(s.tasks.map(t => [t.id, t]))
+  const projects = s.projects.filter(p => p.memberIds.includes(userId) && taskById.get(p.taskId)?.taskKind !== 'exercise').map(p => {
     const c: Contribution | undefined = p.contributions.find(c => c.userId === userId)
-    const t = s.tasks.find(t => t.id === p.taskId)
+    const t = taskById.get(p.taskId)
     const tc = s.teachingClasses.find(c => c.id === t?.classId)
     return {
       id: p.id,
       name: p.name,
-      year: (tc?.academicYear || s.teachingClasses[0]?.academicYear || '').replace('-', '–'),
+      year: tc?.academicYear.replace('-', '–') || '',
+      semester: tc?.semester,
       date: p.created,
       course: s.courses.find(co => co.id === t?.courseId)?.name || '',
+      courseId: t?.courseId,
       teachingClass: tc?.name || '',
       role: c?.role || '成员',
       description: c?.description || '尚未填写职责',

@@ -21,3 +21,7 @@ function changeYear() {
     </el-select>
   </div>
 </template>
+
+<style scoped>
+@media(max-width:600px){.term-filter .el-select{width:clamp(106px,26vw,145px)}}
+</style>

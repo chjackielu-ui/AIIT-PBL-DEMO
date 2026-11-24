@@ -1,4 +1,4 @@
-import type {CourseTask} from './types'
+import type {Course, CourseTask} from './types'
 export const isIndividual=(task?:CourseTask)=>task?.projectType==='individual' || (!task?.projectType && task?.min===1 && task?.max===1)
 export const taskModeName=(task?:CourseTask)=>task?.taskKind==='exercise'?'班级任务':isIndividual(task)?'个人项目':'小组集体项目'
 
@@ -14,7 +14,11 @@ export function beforeDeadline(value?: string) {
   const due = value.replace(' ', 'T')
   return now() <= (due.length === 10 ? due + 'T23:59:59' : due.length === 16 ? due + ':00' : due)
 }
-export function canStartTask(task: CourseTask) {
+export function courseEnded(course?:Course) {
+  return course?.status === '已结束' || [course?.plannedEnd, course?.actualEnd].some(end => end && !beforeDeadline(end))
+}
+export function canStartTask(task: CourseTask, course?:Course) {
+  if (courseEnded(course)) return false
   if (task.status !== '已发布' || !taskStarted(task)) return false
   return task.taskKind === 'exercise'
     ? beforeDeadline(task.milestones[0]?.due || task.due)

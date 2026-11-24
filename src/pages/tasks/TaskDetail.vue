@@ -86,8 +86,8 @@ async function enterExercise(){
     <PageHead :title="task.name">
       <el-button @click="router.push(listLink)"><ArrowLeft :size="16" />返回列表</el-button>
       <el-button v-if="teacher && task.status !== '已关闭'" type="primary" @click="router.push(taskLink(task.id) + '/edit')">修改任务</el-button>
-      <el-button v-if="!teacher && classTask && (alreadyJoined || task.status==='已发布')" type="primary" :loading="entering" :disabled="!alreadyJoined && !canStartTask(task)" @click="enterExercise">{{alreadyJoined?'查看作答':'开始作答'}}</el-button>
-      <el-button v-else-if="!teacher && task.status === '已发布' && !alreadyJoined" type="primary" :disabled="!canStartTask(task)" @click="router.push(`/student/projects/create/${task.id}`)">创建项目</el-button>
+      <el-button v-if="!teacher && classTask && (alreadyJoined || task.status==='已发布')" type="primary" :loading="entering" :disabled="!alreadyJoined && !canStartTask(task,s.courses.find(c => c.id === task!.courseId))" @click="enterExercise">{{alreadyJoined?'查看作答':'开始作答'}}</el-button>
+      <el-button v-else-if="!teacher && task.status === '已发布' && !alreadyJoined" type="primary" :disabled="!canStartTask(task,s.courses.find(c => c.id === task!.courseId))" @click="router.push(`/student/projects/create/${task.id}`)">创建项目</el-button>
       <el-button v-else-if="alreadyJoined && !teacher" type="primary" @click="router.push(`/student/projects/${alreadyJoined.id}`)">进入我的项目</el-button>
     </PageHead>
     <section class="section task-persistent-description">

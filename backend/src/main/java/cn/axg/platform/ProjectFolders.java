@@ -33,12 +33,17 @@ final class ProjectFolders {
         if (!id.isEmpty()) service.nested(project, "folders", id);
     }
 
-    static ObjectNode change(PlatformService service, ObjectNode project, ObjectNode body) {
+    static ObjectNode change(PlatformService service, ObjectNode project, JsonNode actor, ObjectNode body) {
         String op = str(body, "op");
         String folderId = str(body, "folderId");
         if (op.equals("moveFile")) {
             checkTarget(service, project, folderId);
-            service.nested(project, "files", str(body, "fileId")).put("folderId", folderId);
+            ObjectNode file = service.nested(project, "files", str(body, "fileId"));
+            String from = str(file, "folderId");
+            if (!from.equals(folderId)) {
+                file.put("folderId", folderId);
+                LibraryActivity.record(project, actor, "移动资料", file, from, folderId);
+            }
             return o("ok", true);
         }
         if (!project.has("folders")) project.putArray("folders");
@@ -52,6 +57,7 @@ final class ProjectFolders {
             for (int index = 0; index < folders.size(); index++) {
                 if (folders.get(index) == folder) { folders.remove(index); break; }
             }
+            LibraryActivity.record(project, actor, "删除文件夹", folder, str(folder, "parentId"));
             return o("ok", true);
         }
         String name = str(body, "name").strip();
@@ -61,8 +67,14 @@ final class ProjectFolders {
         checkTarget(service, project, parent);
         require(folders.valueStream().noneMatch(f -> f != folder && str(f, "parentId").equals(parent)
             && str(f, "name").equalsIgnoreCase(name)), "同一位置已有同名文件夹");
-        folder.put("name", name).put("parentId", parent);
-        if (creating) folders.add(folder);
+        if (creating || !str(folder, "name").equals(name)) {
+            folder.put("name", name).put("parentId", parent);
+            if (creating) {
+                folder.put("time", now()).put("userId", str(actor, "id"));
+                folders.add(folder);
+            }
+            LibraryActivity.record(project, actor, creating ? "新建文件夹" : "重命名文件夹", folder, parent);
+        }
         return o("ok", true, "folderId", str(folder, "id"));
     }
 }

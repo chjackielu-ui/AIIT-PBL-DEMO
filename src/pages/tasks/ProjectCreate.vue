@@ -23,7 +23,7 @@ const alreadyJoined = computed(() =>
 /** 组队/申请截止已过则不允许提交（与服务端校验一致，提前拦截）。 */
 const deadlinePassed = computed(() => {
   if (!task.value) return false
-  return !canStartTask(task.value)
+  return !canStartTask(task.value,s.value.courses.find(c=>c.id===task.value?.courseId))
 })
 
 const projectForm = reactive({name:'', description:'', tags: '', memberIds: [store.user!.id]})

@@ -9,7 +9,7 @@ import {useStore} from '../store'
 
 import {run, confirmAction, printPage} from '../lib'
 import {taskPath, classPath, classSection, isReviewKind} from '../teacher'
-import {beforeDeadline} from '../taskMode'
+import {courseEnded, beforeDeadline} from '../taskMode'
 import {phaseStatus,pendingTaskCount,projectPhases} from '../projectPresentation'
 import ProjectScores from '../components/ProjectScores.vue'
 import {ElMessage} from 'element-plus'
@@ -41,7 +41,7 @@ const inApplicationReview=computed(()=>route.path.startsWith('/teacher/reviews/p
 const teacher = computed(() => store.user?.role === 'teacher')
 const leader = computed(() => p.value?.leaderId === store.user?.id)
 const viewer = computed(() => store.user?.role === 'student' ? store.user.id : undefined)
-const readonly = computed(() => !p.value || store.user?.role === 'admin' || ['待审核', '待修改', '已归档', '已关闭'].includes(p.value.status))
+const readonly = computed(() => courseEnded(store.state?.courses.find(c=>c.id===task.value?.courseId)) || !p.value || store.user?.role === 'admin' || ['待审核', '待修改', '已归档', '已关闭'].includes(p.value.status))
 
 const tabs = [
   {id: 'overview', name: '概览'},

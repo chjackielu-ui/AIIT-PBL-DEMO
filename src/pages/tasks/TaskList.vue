@@ -37,7 +37,7 @@ watch(module,value=>{if((teacher.value || selectedClass.value) && route.query.mo
 const sort = ref('due')
 const createdFilter=ref(''), modeFilter=ref(''), kindFilter=ref('')
 const joined=(id:string)=>s.value.projects.find(p=>p.taskId===id && p.memberIds.includes(store.user!.id))
-const canCreate=canStartTask
+const canCreate=(task:CourseTask)=>canStartTask(task,s.value.courses.find(c=>c.id===task.courseId))
 const createdCount=(t:CourseTask)=>s.value.projects.filter(p=>p.taskId===t.id).length
 const rosterCount=(t:CourseTask)=>s.value.enrollments.filter(e=>e.classId===t.classId).length
 

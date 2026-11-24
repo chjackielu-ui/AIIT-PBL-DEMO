@@ -6,7 +6,7 @@ import type {FormInstance, FormRules} from 'element-plus'
 import {useStore} from '../../store'
 import {confirmAction, localDate, run} from '../../lib'
 import {classPath, taskPath, teachingClasses} from '../../teacher'
-import {isIndividual} from '../../taskMode'
+import {isIndividual, courseEnded} from '../../taskMode'
 import type {CourseTask, DeliverableRequirement, Milestone} from '../../types'
 import LibraryPicker from '../../components/LibraryPicker.vue'
 import type {ProjectFile} from '../../types'
@@ -22,7 +22,8 @@ const task = computed(() => store.state?.tasks.find(t => t.id === route.params.i
 const course = computed(() => store.state?.courses.find(c => c.id === tc.value?.courseId))
 const original = task.value
 const toPicker = (value: string) => value.length === 10 ? value + 'T23:59' : value.replace(' ', 'T').slice(0, 16)
-const defaultDue = localDate(14) + 'T23:59'
+const courseEnd = computed(() => [course.value?.actualEnd,course.value?.plannedEnd].filter((end):end is string => !!end).map(toPicker).sort()[0])
+const defaultDue = [localDate(14) + 'T23:59',courseEnd.value].filter(Boolean).sort()[0]
 const previousDue = original?.milestones.find(m => m.isFinal || original.taskKind === 'exercise')?.due || original?.due
 const defaults={name:'专业技术实践 '+localDate(),description:'按要求自主完成项目练习'}
 const initialDefaults={
@@ -90,6 +91,8 @@ async function save(status: '草稿' | '已发布' | '已关闭') {
   if (!valid) return
   busy.value = true
   await run(async () => {
+    if (courseEnded(course.value)) throw Error('课程已结束')
+    if (courseEnd.value && form.due > courseEnd.value) throw Error('任务截止时间不能晚于课程结束时间')
     if (form.startAt >= form.due) throw Error('结束时间必须晚于开始时间')
     const group = !classTask.value && !legacyIndividual.value
     if(group && status!=='已关闭' && (!Number.isInteger(form.min) || !Number.isInteger(form.max) || form.min<1 || form.min>form.max || form.max>roster.value))
@@ -140,6 +143,7 @@ async function save(status: '草稿' | '已发布' | '已关闭') {
           <el-form-item label="每组最少人数"><el-input-number v-model="form.min" :min="1" :max="form.max" :step-strictly="true" /></el-form-item>
           <el-form-item :label="'每组最多人数（班级共 '+roster+' 人）'"><el-input-number v-model="form.max" :min="form.min" :max="roster" :step-strictly="true" /></el-form-item>
         </div>
+        <p v-if="courseEnd" class="muted">课程截止 {{ courseEnd.replace('T', ' ') }}{{ courseEnded(course) ? '（已结束）' : '' }}</p>
         <el-form-item label="任务参考资料"><LibraryPicker v-model="references" v-model:uploading="uploading" upload permissions /></el-form-item>
         <SubmissionChecklist :key="form.kind" v-model="checklist[form.kind]" />
         <p v-if="!classTask" class="muted">{{legacyIndividual ? '此项目已有个人申请。' : '学生以小组申请，最终成果验收与项目使用同一截止时间。'}}</p>
@@ -147,7 +151,7 @@ async function save(status: '草稿' | '已发布' | '已关闭') {
       <div class="review-decision-bar publish-actions">
         <el-button :disabled="busy" @click="router.push(classPath(tc.id))">取消</el-button>
         <el-button type="primary" plain :disabled="busy || uploading || currentStatus === '已发布'" @click="save('草稿')">暂存</el-button>
-        <el-button type="primary" :loading="busy" :disabled="uploading" @click="save('已发布')">{{classTask ? '发布任务' : '发布项目'}}</el-button>
+        <el-button type="primary" :loading="busy" :disabled="uploading || courseEnded(course)" @click="save('已发布')">{{classTask ? '发布任务' : '发布项目'}}</el-button>
       </div>
     </div>
   </template>

@@ -20,6 +20,9 @@ if (process.argv.includes('--restart')) {
   assert.equal(project.messages[0].text,'测试讨论 @演示教师1')
   assert.equal(await admin(`/projects/${project.id}/files/${project.files[0].id}`),'数据库附件')
   assert(state.users.some(u=>u.number==='9900112233'))
+  await login(student,'9900000001','student','学生')
+  assert.deepEqual((await student('/state')).user.studentShortcuts,['pending','transcript','library'])
+  assert((await student('/library/activity')).entries.some(event=>event.projectId===project.id && event.action==='上传资料'))
   console.log('PASS MySQL 重启后保留注册、项目状态、结项评分、讨论与附件')
   process.exit(0)
 }
@@ -40,7 +43,7 @@ assert.equal((await teacher('/state')).user.role,'teacher')
 console.log('PASS 三角色登录、错误身份、学生注册、学号唯一、退出及空业务库')
 
 const course = {id:'summer26-verify',className:'丛林班',teacherId:'demo-teacher-1',academicYear:'2026',semester:'小学期',
-  status:'进行中',plannedStart:'2026-07-08 09:00',plannedEnd:'2026-07-19 17:00',
+  status:'进行中',plannedStart:'2026-07-08 09:00',plannedEnd:'2099-11-06 17:00',
   gradingRule:{dimensions:[{id:'project',name:'项目',weight:100,source:'project'}]}}
 const preview = await admin('/admin/course-import/preview',{rows:[course]})
 assert.equal(preview.rows[0].data.semester,'第三学期')
@@ -92,6 +95,9 @@ const file = new FormData()
 file.append('category','代码')
 file.append('file',new Blob(['数据库附件'],{type:'text/plain'}),'fixture.txt')
 const uploaded = await student(`/projects/${projectId}/files`,file)
+assert.equal(uploaded.modifiedBy, studentId)
+assert((await student(`/library/activity?projectId=${projectId}`)).entries.some(event=>event.itemId===uploaded.id && event.action==='上传资料'))
+await action(student,'setStudentShortcuts',{items:['pending','transcript','library']})
 await action(student,'message',{projectId,text:'测试讨论 @演示教师1',mentionIds:['demo-teacher-1'],fileId:uploaded.id})
 assert.equal((await teacher(`/projects/${projectId}/discussion`)).messages[0].text,'测试讨论 @演示教师1')
 assert((await teacher('/state')).notifications.some(n=>n.text==='测试讨论 @演示教师1'))

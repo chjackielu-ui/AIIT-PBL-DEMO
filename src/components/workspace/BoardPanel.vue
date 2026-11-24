@@ -1,11 +1,14 @@
 <script setup lang="ts">
 import {computed} from 'vue'
+import {useRoute} from 'vue-router'
 import {useStore} from '../../store'
 import type {Project, WorkItem} from '../../types'
 import {run} from '../../lib'
 
 const props = defineProps<{project: Project; readonly: boolean}>()
 const store = useStore()
+const route = useRoute()
+const selectedClass = ({row}:{row:WorkItem}) => row.id === route.query.item ? 'board-highlighted-item' : ''
 const userName = (id: string) => store.state?.users.find(u => u.id === id)?.name || id
 
 const view=defineModel<string>('filter',{default:'待完成'})
@@ -23,6 +26,10 @@ async function changeStatus(itemId: string, status: string) {
  <section class="section project-task-board">
   <div class="section-head"><h2>项目工作项</h2><slot name="actions" /></div>
   <div class="toolbar"><el-radio-group v-model="view"><el-radio-button v-for="v in ['待完成','已完成','已过期','全部']" :key="v" :value="v">{{v}}</el-radio-button></el-radio-group></div>
-  <el-table :data="visible" class="assignment-table"><el-table-column label="任务" min-width="200"><template #default="{row:i}"><strong>{{i.title}}</strong></template></el-table-column><el-table-column label="负责人" min-width="100"><template #default="{row:i}">{{userName(i.ownerId)}}</template></el-table-column><el-table-column prop="due" label="截止日期" width="125" /><el-table-column label="状态" width="115"><template #default="{row:i}"><span class="task-status-label" :class="statusClass(i)">{{statusLabel(i)}}</span></template></el-table-column><el-table-column label="操作" width="145" fixed="right" align="right"><template #default="{row:i}"><el-button v-if="canChange(i) && i.status==='待开始'" type="primary" plain @click="changeStatus(i.id,'进行中')">开始任务</el-button><el-button v-else-if="canChange(i) && ['进行中','待验收'].includes(i.status)" type="primary" @click="changeStatus(i.id,'已完成')">标记完成</el-button><span v-else class="muted">{{i.status==='已完成'?'已完成':i.status==='待验收'?'等待验收':'—'}}</span></template></el-table-column><template #empty>暂无符合条件的任务</template></el-table>
+  <el-table :data="visible" :row-class-name="selectedClass" class="assignment-table"><el-table-column label="任务" min-width="200"><template #default="{row:i}"><strong>{{i.title}}</strong></template></el-table-column><el-table-column label="负责人" min-width="100"><template #default="{row:i}">{{userName(i.ownerId)}}</template></el-table-column><el-table-column prop="due" label="截止日期" width="125" /><el-table-column label="状态" width="115"><template #default="{row:i}"><span class="task-status-label" :class="statusClass(i)">{{statusLabel(i)}}</span></template></el-table-column><el-table-column label="操作" width="145" fixed="right" align="right"><template #default="{row:i}"><el-button v-if="canChange(i) && i.status==='待开始'" type="primary" plain @click="changeStatus(i.id,'进行中')">开始任务</el-button><el-button v-else-if="canChange(i) && ['进行中','待验收'].includes(i.status)" type="primary" @click="changeStatus(i.id,'已完成')">标记完成</el-button><span v-else class="muted">{{i.status==='已完成'?'已完成':i.status==='待验收'?'等待验收':'—'}}</span></template></el-table-column><template #empty>暂无符合条件的任务</template></el-table>
  </section>
 </template>
+
+<style scoped>
+.assignment-table :deep(.board-highlighted-item td){background:#edf4ff}
+</style>

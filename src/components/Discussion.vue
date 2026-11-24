@@ -173,6 +173,40 @@ function composerKeys(event:KeyboardEvent) {
    insertMention(mentionOptions.value[highlightedMention.value])
  }
 }
+const excerpt = ref<{messageId:string;title:string;left:number;top:number}>()
+const creatingTodo = ref(false)
+function trackSelection() {
+ const selection = window.getSelection()
+ const range = selection?.rangeCount ? selection.getRangeAt(0) : undefined
+ const node = range?.commonAncestorContainer
+ const element = node?.nodeType === Node.ELEMENT_NODE ? node as Element : node?.parentElement
+ const body = element?.closest('.chat-message-text')
+ const article = body?.closest<HTMLElement>('[data-message-id]')
+ const title = selection?.toString().trim()
+ if (!range || !title || !article?.dataset.messageId || !list.value?.contains(article)) {
+   excerpt.value = undefined
+   return
+ }
+ const rect = range.getBoundingClientRect()
+ excerpt.value = {messageId:article.dataset.messageId,title,left:Math.max(6,Math.min(rect.left,window.innerWidth-175)),top:Math.max(4,rect.top-40)}
+}
+function clearSelection() { window.getSelection()?.removeAllRanges(); excerpt.value = undefined }
+onMounted(() => document.addEventListener('selectionchange',trackSelection))
+onBeforeUnmount(() => document.removeEventListener('selectionchange',trackSelection))
+async function createFromMessage() {
+ const selected = excerpt.value
+ if (!selected || creatingTodo.value) return
+ creatingTodo.value = true
+ await run(async () => {
+   await store.act('createPersonalTodo',{projectId:props.project.id,messageId:selected.messageId,title:selected.title})
+   clearSelection()
+ },'已加入待办事项')
+ creatingTodo.value = false
+}
+function quoteSelection() {
+ const message = props.project.messages.find(m => m.id === excerpt.value?.messageId)
+ if (message) { clearSelection(); quote(message) }
+}
 function quote(m:Message){replyToId.value=m.id;nextTick(()=>composer.value?.textarea?.focus())}
 function jump(id:string){
  emit('clear-search')
@@ -276,7 +310,12 @@ onBeforeUnmount(()=>{clearInterval(poll);codeRequest++})
 <template>
  <div class="collaboration-canvas" @keydown.esc="dismissPanel">
  <section class="chat-channel" aria-label="项目聊天窗格" @pointerdown="dismissPanel">
-  <div ref="list" class="channel-messages" aria-live="polite">
+  <Teleport to="body">
+   <div v-if="excerpt && (!readonly || store.user?.role==='student')" class="excerpt-tools" :style="{top:excerpt.top+'px',left:excerpt.left+'px'}" @pointerdown.prevent>
+    <button v-if="!readonly" @click="quoteSelection">回复</button><button v-if="store.user?.role==='student'" :disabled="creatingTodo" @click="createFromMessage">＋ 创建待办</button>
+   </div>
+  </Teleport>
+  <div @scroll="excerpt && trackSelection()" ref="list" class="channel-messages" aria-live="polite">
    <template v-for="(m,index) in visibleMessages" :key="m.id">
     <div v-if="shouldShowDate(index)" class="chat-date"><span>{{dateLabel(m.time)}}</span></div>
     <article class="channel-message" :class="{mine:m.userId===store.user?.id,'message-target':targetMessage===m.id}" :data-message-id="m.id">
@@ -284,6 +323,7 @@ onBeforeUnmount(()=>{clearInterval(poll);codeRequest++})
      <div class="channel-message-body"><div class="channel-message-meta"><strong>{{userName(m.userId)}}</strong><span v-if="store.state?.users.find(u=>u.id===m.userId)?.role==='teacher'" class="teacher-mark">教师</span><time :title="stamp(m.time)">{{timeLabel(m.time)}}</time><button v-if="!readonly" class="message-reply-button" aria-label="回复此消息" @click="quote(m)"><MessageSquareReply :size="14" /></button></div>
       <button v-if="replyOf(m)" class="quoted-message" @click="jump(m.replyToId!)"><MessageSquareReply :size="13" /><span>{{userName(replyOf(m)!.userId)}}：{{replyOf(m)!.text || replyOf(m)!.codeName || '文件附件'}}</span></button>
       <MarkdownText v-if="m.text" class="chat-message-text" :text="m.text" />
+      <RouterLink v-for="todo in store.user?.personalTodos?.filter(t => t.projectId===project.id && t.messageId===m.id)" :key="todo.id" class="message-todo" :class="{done:todo.done}" to="/student/dashboard">✓ {{todo.title}}</RouterLink>
       <div v-if="m.code" class="chat-code-card"><button class="chat-code-title" @click="openCode(m)"><Code2 :size="14" /><strong>{{m.codeName || '代码片段'}}</strong><span>{{m.codeLanguage || 'CODE'}}</span><ChevronRight :size="14" /></button><pre><code class="hljs" v-html="highlighted.get(m.id)" /></pre><div class="chat-code-actions"><button @click="openCode(m)">在代码区查看</button><button @click="compareCode(m)"><GitCompareArrows :size="13" />对比版本</button></div></div>
       <div v-if="filesOf(m).length" class="chat-attachments"><div v-for="f in filesOf(m)" :key="f.id" class="chat-file-card" draggable="true" @dragstart="dragFile($event,f)"><button @click="openFile(f)"><Code2 v-if="isCodeFile(f)" :size="20" /><Image v-else-if="f.type.startsWith('image/')" :size="20" /><FileText v-else :size="20" /><span><strong>{{f.name}}</strong><small>{{humanSize(f.size)}} · {{f.category}}</small></span></button><a :href="fileDownloadUrl(project.id,f.id)" :aria-label="'下载 '+f.name"><Download :size="15" /></a></div></div>
      </div>
@@ -343,3 +383,9 @@ onBeforeUnmount(()=>{clearInterval(poll);codeRequest++})
  <el-dialog v-model="memberDialog" title="频道成员" width="min(420px, 94vw)" modal-class="channel-members-overlay" align-center append-to-body><div v-for="u in members" :key="u.id" class="list-row"><span>{{u.name}}</span><el-tag size="small">{{u.role==='teacher'?'任课教师':u.id===project.leaderId?'项目负责人':'项目成员'}}</el-tag></div></el-dialog>
  <FilePreviewDialog :file="filePreview" :url="`/api/projects/${project.id}/files/${filePreview?.id || ''}`" @close="filePreview=undefined" />
 </template>
+
+<style scoped>
+.excerpt-tools{position:fixed;z-index:3000;display:flex;gap:3px;border-radius:9px;background:#173f48;padding:3px;box-shadow:0 2px 9px #14393c33}
+.excerpt-tools button{border:0;border-radius:6px;background:transparent;color:white;padding:5px 9px}.excerpt-tools button:hover{background:#28606b}
+.message-todo{display:block;width:fit-content;max-width:100%;overflow-wrap:anywhere;margin-top:4px;padding:2px 8px;background:#ddf3ea;color:#19594c;border-radius:7px;font-size:12px}.message-todo.done{text-decoration:line-through}
+</style>

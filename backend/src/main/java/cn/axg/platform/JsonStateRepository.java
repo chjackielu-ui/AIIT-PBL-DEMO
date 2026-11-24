@@ -14,7 +14,13 @@ final class JsonStateRepository implements StateRepository {
         Files.createDirectories(directory.resolve("files"));
     }
 
-    public Path file(String id, String owner) { return directory.resolve("files").resolve(id); }
+    public Path file(String id, String owner) {
+        if (id.equals("profile-avatar")) {
+            if (!owner.matches("[A-Za-z0-9_-]{1,60}")) throw new IllegalArgumentException("无效的账号标识");
+            return directory.resolve("avatars").resolve(owner);
+        }
+        return directory.resolve("files").resolve(id);
+    }
 
     public ObjectNode load() throws IOException {
         Path state = directory.resolve("state.json");

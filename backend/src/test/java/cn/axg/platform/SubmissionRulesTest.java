@@ -44,6 +44,25 @@ class SubmissionRulesTest {
   assertEquals(92,new PlatformService(data.toString()).find("projects",pid).path("submissions").get(1).path("score").asInt());
  }
 
+ @Test void courseEndAppliesToExistingProjectsAndNewAssignments() throws Exception {
+  PlatformService service=service();
+  String pid=prepare(service,"shared");
+  ObjectNode project=service.find("projects",pid);
+  ObjectNode task=service.find("tasks",project.path("taskId").asText());
+  ObjectNode course=service.find("courses",task.path("courseId").asText());
+  course.put("plannedEnd","2099-04-01T17:00");
+  ObjectNode newTask=task.deepCopy().put("id","");
+  assertThrows(ResponseStatusException.class,()->service.action("t1",o("op","saveTask","task",newTask)));
+  ObjectNode item=o("op","addItem","projectId",pid,"ownerId","s1","title","Draft","due","2099-04-01T17:01");
+  assertThrows(ResponseStatusException.class,()->service.action("t1",item));
+  item.put("due","2099-04-01T17:00");
+  service.action("t1",item);
+  String itemId=service.find("projects",pid).path("items").get(0).path("id").asText();
+  service.find("courses",task.path("courseId").asText()).put("actualEnd","2000-01-01");
+  assertThrows(ResponseStatusException.class,()->service.action("s1",submission(pid,"ppt","")));
+  assertThrows(ResponseStatusException.class,()->service.action("s1",o("op","itemStatus","projectId",pid,"itemId",itemId,"status","已完成")));
+ }
+
  @Test void checklistRejectsWrongFormatMissingCountsForeignFilesAndInvalidConfiguration() throws Exception {
   PlatformService s=service();String pid=prepare(s,"shared");
   assertThrows(ResponseStatusException.class,()->s.action("s1",submission(pid,"pdf","")));

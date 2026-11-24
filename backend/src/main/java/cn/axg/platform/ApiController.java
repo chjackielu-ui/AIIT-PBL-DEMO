@@ -54,6 +54,9 @@ public class ApiController {
  }
  @GetMapping("/library/files/{fid}") ResponseEntity<byte[]> personal(@PathVariable String fid,@RequestParam(defaultValue="false") boolean download,HttpSession session) throws IOException {return bytes(service.libraryFile(uid(session),fid),download);}
  @GetMapping("/library/files/{fid}/preview") ResponseEntity<byte[]> personalPreview(@PathVariable String fid,HttpSession session) throws IOException {return preview(service.libraryFile(uid(session),fid));}
+ @GetMapping("/library/activity") ResponseEntity<ObjectNode> libraryActivity(@RequestParam(defaultValue="") String projectId,@RequestParam(defaultValue="0") int offset,HttpSession session) {
+  return ResponseEntity.ok().cacheControl(CacheControl.noStore()).body(service.libraryActivity(uid(session),projectId,offset));
+ }
  @GetMapping("/tasks/{tid}/files/{fid}") ResponseEntity<byte[]> taskReference(@PathVariable String tid,@PathVariable String fid,@RequestParam(defaultValue="false") boolean download,HttpSession session) throws IOException {return reference(service.taskFile(uid(session),tid,fid),download,session);}
  @GetMapping("/tasks/{tid}/files/{fid}/preview") ResponseEntity<byte[]> taskPreview(@PathVariable String tid,@PathVariable String fid,HttpSession session) throws IOException {return preview(service.taskFile(uid(session),tid,fid));}
  @GetMapping("/classes/{cid}/topics/{tid}/{post}/files/{fid}") ResponseEntity<byte[]> topicFile(@PathVariable String cid,@PathVariable String tid,@PathVariable String post,@PathVariable String fid,@RequestParam(defaultValue="false") boolean download,HttpSession session) throws IOException {return reference(service.topicFile(uid(session),cid,tid,post,fid),download,session);}

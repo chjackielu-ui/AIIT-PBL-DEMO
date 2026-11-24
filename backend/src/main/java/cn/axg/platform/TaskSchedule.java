@@ -43,6 +43,20 @@ final class TaskSchedule {
         }
     }
 
+    static void checkCourse(JsonNode course, String due) {
+        require(!str(course, "status").equals("已结束"), "课程已结束");
+        for (String field : java.util.List.of("plannedEnd", "actualEnd")) {
+            String end = str(course, field);
+            if (end.isBlank()) continue;
+            require(beforeDeadline(end), "课程已结束");
+            try {
+                require(due.isBlank() || !parse(due, true).isAfter(parse(end, true)), "任务时间不能晚于课程结束时间 " + end);
+            } catch (DateTimeParseException e) {
+                require(false, "请填写有效的任务时间");
+            }
+        }
+    }
+
     static boolean started(JsonNode task) {
         return !scheduled(task) || !LocalDateTime.now(ZONE).isBefore(parse(str(task, "startAt"), false));
     }

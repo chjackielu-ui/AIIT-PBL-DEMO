@@ -8,7 +8,7 @@ import {useStore} from '../store'
 import AttachmentLink from '../components/AttachmentLink.vue'
 import Deadline from '../components/Deadline.vue'
 import {run, stamp} from '../lib'
-import {beforeDeadline, taskStarted} from '../taskMode'
+import {courseEnded, beforeDeadline, taskStarted} from '../taskMode'
 import {phaseSubmission, phaseStatus, projectPhases} from '../projectPresentation'
 import {deliverableFiles,validateDeliverables,submissionAttachmentIssue} from '../deliverables'
 import PageHead from '../components/PageHead.vue'
@@ -22,7 +22,7 @@ const m=computed(()=>projectPhases(task.value,p.value).find(m=>m.id===route.para
 const previous=computed(()=>p.value && m.value ? phaseSubmission(p.value,m.value,store.user?.id):undefined)
 const history=computed(()=>p.value?.submissions.filter(sub=>sub.milestoneId===m.value?.id && (m.value?.submissionMode!=='individual' || sub.submitterId===store.user?.id)).slice().reverse() || [])
 const requiredAttachments = computed(() => !!task.value?.startAt || m.value?.requireMaterials !== false)
-const canSubmit=computed(()=>p.value?.memberIds.includes(store.user?.id || '') && (m.value?.submissionMode==='individual' || p.value?.leaderId===store.user?.id) && ['进行中','结项待修改'].includes(p.value?.status || '') && previous.value?.status!=='已通过' && m.value?.requiresSubmission!==false && taskStarted(task.value) && (beforeDeadline(m.value?.due) || !task.value?.startAt && previous.value?.status==='退回修改'))
+const canSubmit=computed(()=>!courseEnded(store.state?.courses.find(c=>c.id===task.value?.courseId)) && p.value?.memberIds.includes(store.user?.id || '') && (m.value?.submissionMode==='individual' || p.value?.leaderId===store.user?.id) && ['进行中','结项待修改'].includes(p.value?.status || '') && previous.value?.status!=='已通过' && m.value?.requiresSubmission!==false && taskStarted(task.value) && (beforeDeadline(m.value?.due) || !task.value?.startAt && previous.value?.status==='退回修改'))
 const form=reactive({description:'',fileIds:[] as string[],deliverables:{} as Record<string,string[]>})
 const baseSubmissionId=ref('')
 const attachmentIssue=computed(()=>submissionAttachmentIssue(m.value?.deliverables || [],form.deliverables,[...form.fileIds,...deliverableFiles(form.deliverables)],requiredAttachments.value))

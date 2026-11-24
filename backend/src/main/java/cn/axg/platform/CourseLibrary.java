@@ -44,14 +44,20 @@ final class CourseLibrary {
         ObjectNode lib=s.library(uid);
         if(op.equals("personalFolder")) {
             require(Set.of("createFolder","renameFolder","deleteFolder","moveFile").contains(str(b,"action")),"目录操作无效");
-            return ProjectFolders.change(s,lib,b.deepCopy().put("op",str(b,"action")));
+            return ProjectFolders.change(s,lib,u,b.deepCopy().put("op",str(b,"action")));
         }
         if(op.equals("personalEdit")) {
             ObjectNode file=s.nested(lib,"files",str(b,"fileId"));
             String name=str(b,"name").strip();
             require(!name.isEmpty() && name.length()<=255,"请输入有效文件名");
             if(!file.has("sourceExtension")) file.put("sourceExtension",DocumentPreview.extension(str(file,"name")));
-            file.put("name",name).put("category",str(b,"category")).put("downloadable",b.path("downloadable").asBoolean(true));
+            String category = str(b,"category");
+            boolean downloadable = b.path("downloadable").asBoolean(true);
+            if (!str(file, "name").equals(name) || !str(file, "category").equals(category)
+                || file.path("downloadable").asBoolean(true) != downloadable) {
+                file.put("name",name).put("category",category).put("downloadable",downloadable);
+                LibraryActivity.record(lib,u,"编辑资料",file,str(file,"folderId"));
+            }
             return o("ok",true);
         }
         if(op.equals("distributeFiles")) {

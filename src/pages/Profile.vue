@@ -71,6 +71,7 @@ async function uploadAvatar(event: Event) {
     body.append('file', file)
     const result = await api<{avatarVersion: number}>('/profile/avatar', body)
     user.value.avatarVersion = result.avatarVersion
+    user.value.hasCustomAvatar = true
   }, '头像已更新')
   uploading.value = false
 }
@@ -78,7 +79,7 @@ async function uploadAvatar(event: Event) {
 function removeAvatar() {
   confirmAction('确定恢复默认头像？', async () => {
     await api('/profile/avatar', undefined, 'DELETE')
-    delete user.value.avatarVersion
+    await store.load()
   }, '已恢复默认头像')
 }
 </script>
@@ -101,7 +102,7 @@ function removeAvatar() {
     <div v-file-drop class="actions profile-photo-actions" title="也可将 JPG 或 PNG 拖到这里更换头像">
       <input ref="avatarInput" type="file" :disabled="uploading" accept="image/jpeg,image/png" hidden @change="uploadAvatar">
       <el-button :loading="uploading" @click="avatarInput?.click()"><Camera :size="16" />更换头像</el-button>
-      <el-button v-if="user.avatarVersion" :disabled="uploading" @click="removeAvatar"><Trash2 :size="16" />移除头像</el-button>
+      <el-button v-if="user.hasCustomAvatar" :disabled="uploading" @click="removeAvatar"><Trash2 :size="16" />恢复默认头像</el-button>
     </div>
   </section>
 

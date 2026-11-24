@@ -12,7 +12,7 @@ import Status from './Status.vue'
 import DirectUpload from './DirectUpload.vue'
 import ReviewWorkbench from './ReviewWorkbench.vue'
 import DeliverablePicker from './DeliverablePicker.vue'
-import {beforeDeadline, taskStarted} from '../taskMode'
+import {courseEnded, beforeDeadline, taskStarted} from '../taskMode'
 import {phaseStatus, projectPhases} from '../projectPresentation'
 import {deliverableFiles,validateDeliverables,submissionAttachmentIssue} from '../deliverables'
 
@@ -21,7 +21,7 @@ const store = useStore()
 const teacher = computed(() => store.user?.role === 'teacher')
 const member = computed(() => props.project.memberIds.includes(store.user?.id || ''))
 const task = computed(() => store.state?.tasks.find(t => t.id === props.project.taskId))
-const canSubmit=computed(()=>member.value && props.project.leaderId===store.user?.id && !props.readonly && ['进行中','结项待修改','结项待审核'].includes(props.project.status) && taskStarted(task.value) && (beforeDeadline(finalMilestone.value?.due) || !task.value?.startAt && props.project.status==='结项待修改'))
+const canSubmit=computed(()=>!courseEnded(store.state?.courses.find(c=>c.id===task.value?.courseId)) && member.value && props.project.leaderId===store.user?.id && !props.readonly && ['进行中','结项待修改','结项待审核'].includes(props.project.status) && taskStarted(task.value) && (beforeDeadline(finalMilestone.value?.due) || !task.value?.startAt && props.project.status==='结项待修改'))
 const dialog = ref(false)
 const busy = ref(false)
 const grading = ref(false)

@@ -1,7 +1,8 @@
 export type Role='student'|'teacher'|'admin'
-export interface User {id:string;name:string;role:Role;classId?:string;number?:string;contact?:string;enabled:boolean;hasPassword?:boolean;permissions?:string[];avatarVersion?:number;bio?:string;interests?:string[];techStack?:string[]}
+export interface PersonalTodo {id:string;title:string;start:string;due:string;done:boolean;messageId?:string;projectId?:string}
+export interface User {id:string;name:string;role:Role;classId?:string;number?:string;contact?:string;enabled:boolean;hasPassword?:boolean;permissions?:string[];avatarVersion?:number;hasCustomAvatar?:boolean;bio?:string;interests?:string[];techStack?:string[];studentShortcuts?:string[];personalTodos?:PersonalTodo[]}
 export interface BaseClass {id:string;name:string;college?:string;major?:string}
-export interface Course {id:string;name:string;status?:string;plannedStart?:string;plannedEnd?:string;actualStart?:string;actualEnd?:string}
+export interface Course {id:string;name:string;status?:string;plannedStart?:string;plannedEnd?:string;actualStart?:string;actualEnd?:string;credits?:number;coverUrl?:string}
 export interface CourseDimension {id:string;name:string;weight:number;source:'manual'|'project'}
 export interface GradingRule {dimensions?:CourseDimension[];attendance?:number;homework?:number;project?:number}
 export interface CourseGrade {classId:string;dimensions:CourseDimension[];rows:{studentId:string;scores:Record<string,number>;total:number|null}[]}
@@ -15,13 +16,15 @@ export interface GradingDetails {score?:number;reviewers:ScoreReviewer[];rubric?
 export interface Milestone {parentId?:string;scoreWeight?:number;rubric?:RubricPoint[];submissionMode?:'shared'|'individual';deliverables?:DeliverableRequirement[];scoringRule?:string;id:string;name:string;description:string;due:string;materials:string;criteria:string;isFinal?:boolean;requireMaterials?:boolean;requiresSubmission?:boolean}
 export interface CourseTask {references?:ProjectFile[];taskKind?:'training'|'exercise';projectType?:'individual'|'group';created?:string;startAt?:string;id:string;name:string;teacherId:string;courseId:string;classId:string;description:string;crossClass:boolean;min:number;max:number;teamDue:string;due:string;status:string;milestones:Milestone[]}
 export interface WorkItem {id:string;title:string;ownerId:string;status:string;due:string;source:string}
-export interface ProjectFolder {projectId?:string;id:string;name:string;parentId:string}
-export interface ProjectFile {sourceProjectId?:string;id:string;name:string;category:string;size:number;type:string;userId:string;time:string;folderId?:string;directory?:string;sourceExtension?:string;downloadable?:boolean}
+export interface LibraryMetadata {time?:string;userId?:string;modifiedAt?:string;modifiedBy?:string}
+export interface LibraryEvent {id:string;action:string;itemId:string;name:string;projectId:string;time:string;userId:string}
+export interface ProjectFolder extends LibraryMetadata {projectId?:string;id:string;name:string;parentId:string}
+export interface ProjectFile extends LibraryMetadata {sourceProjectId?:string;id:string;name:string;category:string;size:number;type:string;userId:string;time:string;folderId?:string;directory?:string;sourceExtension?:string;downloadable?:boolean}
 export interface Message {id:string;userId:string;text:string;code:string;fileId:string;fileIds?:string[];replyToId?:string;codeName?:string;codeLanguage?:string;time:string}
 export interface Submission {grading?:GradingDetails;submissionMode?:'shared'|'individual';submitterId?:string;deliverables?:Record<string,string[]>;id:string;milestoneId:string;description:string;fileIds:string[];status:string;score?:number;comment:string;time:string;reviewerId?:string;reviewTime?:string}
 export interface Contribution {userId:string;role:string;description:string;percent:number;evidence:string;score?:number;comment?:string}
 export interface FinalResult {submitTime?:string;grading?:GradingDetails;submitterId?:string;deliverables?:Record<string,string[]>;summary:string;description:string;fileIds:string[];imageIds:string[];link:string;contributions:Contribution[];expertName:string;expertOrg:string;expertScore?:number;expertComment:string;projectScore?:number;comment:string;approved:boolean;reviewerId?:string;reviewTime?:string}
-export interface Project {projectType?:'individual'|'group';id:string;taskId:string;name:string;description:string;tags:string;leaderId:string;memberIds:string[];status:string;created:string;share:boolean;shareId:string;reviewComment:string;milestoneRevision?:number;milestones?:Milestone[];items:WorkItem[];files:ProjectFile[];folders?:ProjectFolder[];messages:Message[];submissions:Submission[];final?:FinalResult;finalHistory:FinalResult[];contributions:Contribution[];activity:{text:string;time:string;userId:string}[]}
+export interface Project extends LibraryMetadata {projectType?:'individual'|'group';id:string;taskId:string;name:string;description:string;tags:string;leaderId:string;memberIds:string[];status:string;created:string;share:boolean;shareId:string;reviewComment:string;milestoneRevision?:number;milestones?:Milestone[];items:WorkItem[];files:ProjectFile[];folders?:ProjectFolder[];messages:Message[];submissions:Submission[];final?:FinalResult;finalHistory:FinalResult[];contributions:Contribution[];activity:{id?:string;action?:string;itemId?:string;name?:string;text:string;time:string;userId:string}[]}
 export type NotificationType = 'mentionMe'|'mentionAll'|'reply'|'fileUpload'|'codeUpdate'
 export interface Notice {id:string;userId:string;title:string;text:string;path:string;read:boolean;time:string;type?:NotificationType|'system'}
 export interface HistoryRecord {id:string;userId:string;name:string;year:string;date:string;role:string;description:string;contribution:string;summary:string}

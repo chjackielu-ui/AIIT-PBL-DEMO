@@ -1,15 +1,16 @@
 <script setup lang="ts">
 import {computed,ref,shallowRef,watch} from 'vue'
 import {useRoute} from 'vue-router'
-import {ChevronRight,Download,Ellipsis,FileText,Folder as FolderIcon,FolderOpen,FolderKanban,FolderPlus,HardDrive,LockKeyhole,PanelLeft,Search,UploadCloud} from 'lucide-vue-next'
+import {ChevronDown,ChevronRight,ChevronUp,Download,Ellipsis,FileText,Folder as FolderIcon,FolderOpen,FolderKanban,FolderPlus,HardDrive,History,LockKeyhole,PanelLeft,Search,UploadCloud} from 'lucide-vue-next'
 import {ElMessage} from 'element-plus'
 import {useStore} from '../store'
-import {confirmAction,humanSize,run} from '../lib'
+import {confirmAction,humanSize,run,stamp} from '../lib'
 import {fileCategories,uploadProjectFile} from '../projectUploads'
 import {hasFiles} from '../fileDrop'
 import {directoryIndex,trail,type LibraryDirectory,type LibraryEntry,type LibraryScope} from '../libraryDirectory'
 import type {Project} from '../types'
 import FilePreviewDialog from './FilePreviewDialog.vue'
+import LibraryActivity from './LibraryActivity.vue'
 
 const props=defineProps<{project:Pick<Project,'id'|'files'|'folders'>;readonly:boolean;personal?:boolean}>()
 const store=useStore(),route=useRoute()
@@ -17,6 +18,27 @@ const index=computed(()=>directoryIndex(props.project,{id:props.project.id,perso
 const currentKey=ref(''),query=ref(''),filter=ref('')
 const current=computed(()=>index.value.directories.get(currentKey.value) || index.value.root)
 const crumbs=computed(()=>trail(current.value))
+const details=computed(()=>store.user?.role==='student')
+const activityOpen=ref(false)
+const activityProject=computed(()=>current.value.scope.personal?'':current.value.scope.id)
+const names=computed(()=>new Map(store.state?.users.map(user=>[user.id,user.name])))
+const author=(id?:string)=>id?(names.value.get(id) || '未知用户'):'—'
+const sortColumns = [{key:'name',label:'名称'},{key:'time',label:'上传 / 创建时间'},{key:'modifiedAt',label:'最后修改时间'}] as const
+type SortKey = typeof sortColumns[number]['key']
+const sortBy = ref<SortKey>('name'), descending = ref(false)
+const compareNames = new Intl.Collator('zh-CN',{numeric:true})
+function sortColumn(key:SortKey) {
+ if (sortBy.value === key) descending.value = !descending.value
+ else {
+   sortBy.value = key
+   descending.value = key !== 'name'
+ }
+}
+function compareEntries(a:{name:string;time?:string;modifiedAt?:string}, b:typeof a) {
+ const key = sortBy.value
+ const x = a[key], y = b[key]
+ return Number(!x) - Number(!y) || (descending.value ? -1 : 1) * compareNames.compare(x || '',y || '') || compareNames.compare(a.name,b.name)
+}
 const pathLabel=(dir:LibraryDirectory)=>trail(dir).map(d=>d.name).join(' / ')
 const treeOpen=ref(window.matchMedia('(min-width: 761px)').matches)
 const expanded=ref(new Set([index.value.root.key]))
@@ -52,7 +74,10 @@ const visible=computed(()=>{
    }
  }
  collect(current.value)
- files.sort((a,b)=>b.file.time.localeCompare(a.file.time))
+ if (details.value) {
+   folders.sort((a,b)=>Number(b.projectRoot)-Number(a.projectRoot) || compareEntries(a,b))
+   files.sort((a,b)=>compareEntries(a.file,b.file))
+ } else files.sort((a,b)=>b.file.time.localeCompare(a.file.time))
  return {folders,files}
 })
 const selected=ref<string[]>([]),classIds=ref<string[]>([]),distribute=ref(false)
@@ -67,9 +92,10 @@ const endpoint=(entry:LibraryEntry)=>{
  const scope=entry.directory.scope
  return (scope.personal?'/api/library':'/api/projects/'+scope.id)+'/files/'+entry.file.id
 }
-watch(()=>route.query.file,id=>{
+watch([()=>route.query.file,()=>props.project.id],([id])=>{
  const entry=index.value.files.find(e=>e.file.id===id)
- if(entry){navigate(entry.directory);preview.value=entry}
+ preview.value=entry
+ if(entry)navigate(entry.directory)
 },{immediate:true})
 function action(scope:LibraryScope,op:string,data:Record<string,unknown>){
  if(scope.readonly)throw Error('此项目资料只读')
@@ -184,6 +210,7 @@ async function saveFile(){
    <button class="desk-icon tree-toggle" :class="{active:treeOpen}" type="button" aria-label="目录面板" :aria-expanded="treeOpen" title="展开或收起目录" @click="treeOpen=!treeOpen"><PanelLeft :size="17"/></button>
    <el-input v-model="query" class="desk-search" placeholder="搜索文件和文件夹" aria-label="搜索文件和文件夹" clearable><template #prefix><Search :size="15"/></template></el-input>
    <el-select v-model="filter" class="type-filter" clearable placeholder="全部文件类型" aria-label="筛选文件类型"><el-option v-for="item in fileCategories" :key="item" :value="item"/></el-select>
+   <el-button v-if="details" @click="activityOpen=true"><History :size="15"/>操作日志</el-button>
    <div v-if="!current.scope.readonly" class="desk-actions">
     <template v-if="isTeacher"><el-checkbox v-model="allowDownload">允许学生下载</el-checkbox><el-button :disabled="!selected.length" @click="distribute=true">分发到班级{{selected.length?'（'+selected.length+'）':''}}</el-button></template>
     <el-button @click="showFolderEditor()"><FolderPlus :size="15"/>新建文件夹</el-button>
@@ -202,18 +229,26 @@ async function saveFile(){
    </nav>
    <div class="desk-content" :class="{over:current.key===dropTarget}" @dragover="over($event,current)" @dragleave="leave" @drop="drop($event,current)">
     <nav class="file-crumbs" aria-label="资料路径"><template v-for="(dir,i) in crumbs" :key="dir.key"><ChevronRight v-if="i" :size="13"/><button class="text-button" :title="dir.name" :aria-current="dir.key===current.key?'location':undefined" @click="navigate(dir)">{{dir.name}}</button></template><small v-if="current.scope.readonly"><LockKeyhole :size="12"/>只读</small></nav>
-    <div v-if="visible.folders.length || visible.files.length" class="desk-grid">
+    <div v-if="visible.folders.length || visible.files.length" :class="details?'desk-details':'desk-grid'" :tabindex="details?0:undefined" :role="details?'region':undefined" :aria-label="details?'资料详情列表':undefined">
+     <div v-if="details" class="details-head">
+      <button v-for="column in sortColumns" :key="column.key" type="button" :aria-label="'按'+column.label+'排序'+(sortBy===column.key?(descending?'（当前降序）':'（当前升序）'):'')" @click="sortColumn(column.key)">
+       {{ column.label }} <component v-if="sortBy===column.key" :is="descending?ChevronDown:ChevronUp" :size="14" aria-hidden="true" />
+      </button>
+      <span>上传人 / 创建人</span><span>修改人</span><span>操作</span>
+     </div>
      <article v-for="dir in visible.folders" :key="dir.key" class="desk-entry" :class="{over:dir.key===dropTarget}" @dragover="over($event,dir)" @dragleave="leave" @drop="drop($event,dir)">
       <button class="entry-open" type="button" :title="pathLabel(dir)" @click="navigate(dir)">
        <span class="entry-art" :class="{project:dir.projectRoot}"><component :is="dir.projectRoot?FolderKanban:FolderIcon" :size="26" :stroke-width="1.6"/></span>
        <span class="entry-text"><strong>{{dir.name}}</strong><small>{{dir.projectRoot?'项目 · ':''}}{{dir.children.length+dir.files.length}} 项</small></span>
       </button>
+      <template v-if="details"><time :datetime="dir.time">{{stamp(dir.time || '') || '—'}}</time><time :datetime="dir.modifiedAt">{{stamp(dir.modifiedAt || '') || '—'}}</time><span class="details-person">{{author(dir.userId)}}</span><span class="details-person">{{author(dir.modifiedBy)}}</span></template>
       <span v-if="dir.projectRoot" class="entry-lock" title="项目文件夹" aria-label="项目文件夹"><LockKeyhole :size="13"/></span>
       <el-dropdown v-else-if="!dir.scope.readonly" class="entry-menu" trigger="click" @command="(cmd:string)=>folderCommand(cmd,dir)"><button class="desk-icon" :aria-label="dir.name+' 文件夹操作'"><Ellipsis :size="16"/></button><template #dropdown><el-dropdown-menu><el-dropdown-item command="rename">重命名</el-dropdown-item><el-dropdown-item command="delete" :disabled="!!(dir.children.length || dir.files.length)">删除空文件夹</el-dropdown-item></el-dropdown-menu></template></el-dropdown>
      </article>
      <article v-for="entry in visible.files" :key="entry.key" class="desk-entry file" :class="{selectable:isTeacher}" :draggable="!entry.directory.scope.readonly" @dragstart="drag($event,entry)">
       <el-checkbox v-if="isTeacher" v-model="selected" :value="entry.file.id" class="entry-select" :aria-label="'选择 '+entry.file.name"/>
       <button class="entry-open" type="button" :title="entry.file.name" @click="preview=entry"><span class="entry-art paper"><FileText :size="23"/></span><span class="entry-text"><strong>{{entry.file.name}}</strong><small>{{searching?pathLabel(entry.directory)+' · ':''}}{{humanSize(entry.file.size)}}</small></span></button>
+      <template v-if="details"><time :datetime="entry.file.time">{{stamp(entry.file.time) || '—'}}</time><time :datetime="entry.file.modifiedAt">{{stamp(entry.file.modifiedAt || '') || '—'}}</time><span class="details-person">{{author(entry.file.userId)}}</span><span class="details-person">{{author(entry.file.modifiedBy)}}</span></template>
       <div class="entry-menu"><a class="desk-icon" :href="endpoint(entry)+'?download=true'" :aria-label="'下载 '+entry.file.name" title="下载" download><Download :size="14"/></a>
        <el-dropdown v-if="!entry.directory.scope.readonly" trigger="click" @command="(cmd:string)=>fileAction(cmd,entry)"><button class="desk-icon" :aria-label="entry.file.name+' 资料操作'"><Ellipsis :size="16"/></button><template #dropdown><el-dropdown-menu><el-dropdown-item command="move">移动到文件夹</el-dropdown-item><el-dropdown-item v-if="store.user?.role==='teacher' || entry.file.userId===store.user?.id" command="edit">编辑资料</el-dropdown-item></el-dropdown-menu></template></el-dropdown>
       </div>
@@ -223,6 +258,7 @@ async function saveFile(){
    </div>
   </div>
  </section>
+  <LibraryActivity v-if="details" v-model="activityOpen" :project-id="activityProject" @changed="store.load()" />
   <el-dialog v-model="distribute" title="分发到班级资料库" width="min(460px,94vw)">
     <p>已选择 {{selected.length}} 份资料</p>
     <el-select v-model="classIds" multiple filterable placeholder="选择接收资料的教学班"><el-option v-for="tc in store.state?.teachingClasses" :key="tc.id" :label="tc.name" :value="tc.id" /></el-select>
@@ -265,5 +301,15 @@ async function saveFile(){
 .entry-open{gap:9px;text-align:left;min-width:0;flex:1;min-height:65px;padding:8px}.entry-art{display:grid;place-items:center;flex:none;width:35px;height:35px;border-radius:7px;background:#edf3fc;color:#5079a6}.entry-art.project{color:#3d6598;background:#e6effb}.entry-art.paper{background:#f2f5f9}
 .entry-text{display:grid;gap:3px;min-width:0}.entry-text strong{font-size:13px}.entry-text small{font-size:11px;color:#65758a}
 .entry-lock{color:#768aa0;padding:4px}.entry-menu{flex-direction:column;flex:none}.entry-menu .desk-icon{height:23px}.entry-select{margin-left:8px;margin-right:0}.over{outline:2px solid #7da5d4;outline-offset:-2px}
+.desk-details{overflow:auto;border:1px solid var(--line);border-radius:7px;background:white}
+.desk-details :is(.details-head,.desk-entry){display:grid;grid-template-columns:minmax(160px,2fr) minmax(120px,1fr) minmax(120px,1fr) minmax(80px,.65fr) minmax(80px,.65fr) 60px;align-items:center;gap:8px;min-width:660px;padding:0 8px;border:0;border-radius:0;border-bottom:1px solid var(--line)}
+.details-head{background:#eef3fa;color:#415872;min-height:34px;font-size:12px;font-weight:600}
+.details-head button{display:flex;align-items:center;gap:4px;border:0;background:transparent;color:inherit;font-weight:inherit;padding:5px 0;text-align:left}
+.details-head button:first-child{padding-left:6px}
+.desk-details .desk-entry:last-child{border-bottom:0}
+.desk-details .entry-open{padding:5px 0;min-height:43px}
+.desk-details .entry-art{width:27px;height:27px}.desk-details .entry-art svg{width:17px;height:17px}
+.desk-details .entry-menu{flex-direction:row}.desk-details .entry-lock{padding-left:8px}
+.desk-details time,.details-person{font-size:12px;color:#52657b;white-space:nowrap;text-overflow:ellipsis;overflow:hidden;font-variant-numeric:tabular-nums}
 @media(max-width:760px){.desk-body.split{grid-template-columns:minmax(0,1fr)}.desk-tree{border-right:0;border-bottom:1px solid var(--line);max-height:190px}.desk-toolbar{gap:6px}.desk-actions{margin-left:0}.desk-content{padding:8px}.desk-toolbar .type-filter{width:118px}.desk-grid{grid-template-columns:repeat(auto-fill,minmax(min(160px,100%),1fr))}}
 </style>

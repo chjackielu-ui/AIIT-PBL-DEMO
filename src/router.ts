@@ -48,7 +48,7 @@ export const router = createRouter({
         // —— 学生端 ——
         {path: 'teacher/library', component: () => import('./pages/StudentLibrary.vue'), meta:{role:'teacher'}},
         {path: 'student/library', component: () => import('./pages/StudentLibrary.vue'), meta:{role:'student'}},
-        {path: 'student/dashboard', component: Dashboard, meta: {role: 'student'}},
+        {path: 'student/dashboard', component: () => import('./pages/StudentDashboard.vue'), meta: {role: 'student'}},
         {path: 'student/learning', redirect: {path:'/student/personal',query:{tab:'learning'}}},
         {path: 'student/submissions', component: () => import('./pages/Submissions.vue'), meta: {role: 'student'}},
         {path: 'teacher/submissions', redirect: '/teacher/reviews/achievements'},

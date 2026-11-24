@@ -6,6 +6,7 @@ import {useStore} from '../store'
 
 import {projectPath} from '../teacher'
 import {run} from '../lib'
+import {courseEnded} from '../taskMode'
 import Discussion from '../components/Discussion.vue'
 import '../discussion.css'
 const store=useStore(),route=useRoute(),router=useRouter()
@@ -25,7 +26,8 @@ async function toggleMute(){
  await run(()=>store.act('setDiscussionMute',{projectId:project.value!.id,muted:value}),value?'已开启讨论免打扰':'已恢复讨论通知')
  savingMute.value=false
 }
-const readonly=computed(()=>!project.value || store.user?.role==='admin' || ['待审核','待修改','已归档','已关闭'].includes(project.value.status))
+const activeTask=computed(()=>store.state?.tasks.find(t=>t.id===project.value?.taskId))
+const readonly=computed(()=>courseEnded(store.state?.courses.find(c=>c.id===activeTask.value?.courseId)) || !project.value || store.user?.role==='admin' || ['待审核','待修改','已归档','已关闭'].includes(project.value.status))
 const course=(taskId:string)=>{const t=store.state!.tasks.find(t=>t.id===taskId);return store.state!.teachingClasses.find(c=>c.id===t?.classId)?.name || ''}
 function selectProject(id:string){router.push(`/${store.user?.role}/discussions/${id}`)}
 function selectCourse(){const first=projects.value[0];if(first)selectProject(first.id)}
