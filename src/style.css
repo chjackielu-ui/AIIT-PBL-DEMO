@@ -365,19 +365,13 @@ code.hljs {padding: var(--s4); line-height: 1.6}
 .import-presets .form-grid {grid-template-columns: repeat(4, minmax(0, 1fr)); margin-bottom: 12px}
 .narrow {max-width: 900px}
 
-/* ============ 通知与个人档案 ============ */
+/* ============ 通知 ============ */
 .notification-row {display: flex; align-items: flex-start; width: 100%; text-align: left; padding: var(--s5); border: 1px solid var(--line); border-bottom: 0; background: white; color: var(--text); gap: var(--s4)}
 .notification-row:last-child {border-bottom: 1px solid var(--line)}
 .notification-row > div {flex: 1}
 .notification-row p {color: var(--muted); margin: var(--s2) 0}
 .notification-row:hover {background: var(--hover)}
 .notice-icon {color: var(--primary); border: 1px solid var(--line); border-radius: var(--small-radius); padding: var(--s2)}
-.portfolio-summary {display: flex; align-items: center; gap: var(--s3); padding: var(--s4) 0 var(--s5); border-bottom: 1px solid var(--line)}
-.portfolio-summary h2, .portfolio-summary p {margin: 0}
-.portfolio-record {display: flex; gap: var(--s5); padding: var(--s5) 0; border-bottom: 1px solid var(--line)}
-.portfolio-date {width: 120px; flex-shrink: 0; color: var(--muted)}
-.portfolio-date small {display: block; margin-top: var(--s2)}
-.portfolio-content {flex: 1; min-width: 0}
 
 /* ============ 登录页 ============ */
 .account-grid {display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--s2)}
@@ -452,9 +446,6 @@ code.hljs {padding: var(--s4); line-height: 1.6}
   .page-head > .actions {justify-content: flex-start}
   .section, .phase-block, .form-page {padding: var(--s4)}
   .milestone-row .date {margin-left: 44px}
-  .portfolio-record {flex-direction: column; gap: var(--s3)}
-  .portfolio-date {width: auto}
-  .portfolio-date small {display: inline; margin-left: var(--s2)}
   .public-toolbar {flex-wrap: wrap}
   .print-document {margin: var(--s4); padding: var(--s4)}
   .result-images img {max-width: 100%}

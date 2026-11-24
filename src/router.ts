@@ -1,4 +1,4 @@
-import {createRouter, createWebHistory} from 'vue-router'
+import {createRouter, createWebHistory, stringifyQuery} from 'vue-router'
 import {useStore} from './store'
 
 import {classPath, taskPath, projectPath} from './teacher'
@@ -31,6 +31,7 @@ type Role = 'student' | 'teacher' | 'admin'
 
 export const router = createRouter({
   history: createWebHistory(),
+  stringifyQuery: query => stringifyQuery(query).replace(/\|/g, '%7C'),
   routes: [
     {path: '/login', component: Login},
     {path: '/join/:token', component: () => import('./pages/JoinClass.vue')},

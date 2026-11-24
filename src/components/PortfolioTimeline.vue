@@ -74,6 +74,7 @@ const months = computed(() => {
 })
 const selected = computed(() => months.value.find(item => item.id === month) || months.value[0])
 function recordPath(id: string, monthId: string) {
+  if (projectById.value.has(id)) return {path:'/student/projects/'+id,query:{origin:'/student/personal'}}
   return {path:'/student/personal/'+id, query:{...route.query, month:monthId}}
 }
 </script>
