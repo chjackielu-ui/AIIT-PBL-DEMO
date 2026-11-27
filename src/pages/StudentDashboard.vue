@@ -9,6 +9,7 @@ import {studentTodo} from '../studentTodo'
 import {stamp} from '../lib'
 import {useNotificationActions} from '../notifications'
 import AccountAvatar from '../components/AccountAvatar.vue'
+import Counter from '../components/Counter.vue'
 import BorderGlow from '../components/BorderGlow.vue'
 import PageHead from '../components/PageHead.vue'
 import ProjectTeam from '../components/ProjectTeam.vue'
@@ -74,9 +75,9 @@ function projectLink(id:string, tab?:string, file?:string) {
       <AccountAvatar :user="me" :size="42" />
       <div class="student-overview-name"><strong>{{ me.name }}</strong><small v-if="administrativeClass">{{ administrativeClass }}</small></div>
       <div class="student-overview-metrics">
-        <button type="button" @click="todo?.reveal()"><strong>{{ pendingCount }}</strong><span>待完成</span></button>
-        <RouterLink :to="allProjects"><strong>{{ projects.length }}</strong><span>开发中</span></RouterLink>
-        <RouterLink to="/notifications"><strong>{{ unread }}</strong><span>未读通知</span></RouterLink>
+        <button type="button" @click="todo?.reveal()"><Counter :value="pendingCount" :font-size="20" :font-weight="700" :duration="1" :stagger="0.08" /><span>待完成</span></button>
+        <RouterLink :to="allProjects"><Counter :value="projects.length" :font-size="20" :font-weight="700" :duration="1" :stagger="0.08" /><span>开发中</span></RouterLink>
+        <RouterLink to="/notifications"><Counter :value="unread" :font-size="20" :font-weight="700" :duration="1" :stagger="0.08" /><span>未读通知</span></RouterLink>
       </div>
     </div>
 
@@ -117,7 +118,7 @@ function projectLink(id:string, tab?:string, file?:string) {
 
       <section class="section student-panel notices-panel">
         <div class="section-head"><h2><Bell :size="17" />通知 <span v-if="unread" class="notice-count">{{ unread }} 未读</span></h2><RouterLink to="/notifications">查看全部 <ArrowRight :size="14" /></RouterLink></div>
-        <RouterLink v-for="notice in notices.slice(0,4)" :key="notice.id" :to="notice.path" class="student-notice" @click.prevent="openNotice(notice)">
+        <RouterLink v-for="(notice, index) in notices.slice(0,4)" :key="notice.id" :to="notice.path" class="student-notice enter" :style="{animationDelay:(index*80)+'ms'}" @click.prevent="openNotice(notice)">
           <strong :class="{'unread-notice':!notice.read}">{{ notice.title }}</strong><time :datetime="notice.time">{{ stamp(notice.time).slice(5,10) }}</time><small :title="notice.text">{{ notice.text }}</small>
         </RouterLink>
         <p v-if="!notices.length" class="panel-note">暂时没有新消息，课程和项目提醒会出现在这里。</p>
@@ -194,4 +195,13 @@ function projectLink(id:string, tab?:string, file?:string) {
   .recent-project:only-child .recent-heading{grid-row:auto}
   .student-panel{padding-inline:12px}
 }
+
+/* Counter 数字滚动：与原 strong 字号/字距保持一致 */
+.student-overview-metrics :deep(.counter) { font-variant-numeric: tabular-nums; }
+.student-overview-metrics :deep(.counter) > span { line-height: 1.2; }
+
+/* 列表逐行入场：通知按 55ms 递增错开 */
+@keyframes list-enter { from { opacity: 0; transform: translateY(6px) } to { opacity: 1; transform: none } }
+.student-notice.enter { animation: list-enter .45s cubic-bezier(.22,.68,.32,1) both }
+@media (prefers-reduced-motion: reduce) { .student-notice.enter { animation: none } }
 </style>

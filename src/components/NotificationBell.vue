@@ -93,4 +93,9 @@ onBeforeUnmount(() => {
 .bell-panel-enter-from,.bell-panel-leave-to{opacity:0;transform:translateY(-4px)}
 @media(max-width:600px){.bell-panel-card{position:fixed;inset:56px 10px auto auto}}
 @media(prefers-reduced-motion:reduce){.bell-panel-enter-active,.bell-panel-leave-active{transition:none}}
+
+/* 未读数出现时弹入 */
+@keyframes bell-pop { 0% { transform: scale(.5); opacity: 0; } 60% { transform: scale(1.15); } 100% { transform: scale(1); opacity: 1; } }
+.bell-count { animation: bell-pop .28s cubic-bezier(.22,.68,.32,1); }
+@media (prefers-reduced-motion: reduce) { .bell-count { animation: none; } }
 </style>
