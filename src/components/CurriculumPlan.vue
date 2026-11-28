@@ -27,7 +27,7 @@ const challenges = softwareProjectCourses.filter(course => course.challenge !== 
       <div class="curriculum-legend">
         <p><strong>L · 项目目标层次</strong>　1L 初步感知、2L 巩固提升、3L 深化拓展、4L 持久发展</p>
         <p><strong>D · 项目设计维度</strong>　1D 课程内、2D 学期课程间、3D 跨学期课程间、4D 跨学科</p>
-        <p><strong>Cx · 挑战项目级别</strong>　C0 是入门级，C1–C4 是各学年的分级挑战项目。</p>
+        <p><strong>C · 挑战项目级别</strong>　C0 是入门级，C1–C4 是各学年的分级挑战项目。</p>
       </div>
       <details class="course-plan-list">
         <summary>查看全部 29 门项目学习课程</summary>

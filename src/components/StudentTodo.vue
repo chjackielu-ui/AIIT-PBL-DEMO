@@ -113,8 +113,9 @@ defineExpose({reveal})
     <div id="student-todo-list" ref="list" class="todo-list" :class="{expanded}"
       :style="expanded && maxHeight !== undefined ? {maxHeight: 'min(18rem, ' + maxHeight + 'px)'} : undefined"
       :tabindex="expanded && visibleRows.length ? 0 : undefined" role="region" aria-label="事项列表">
-      <component :is="row.personal ? 'label' : 'RouterLink'" v-for="row in visibleRows" :key="row.id"
-        :to="row.to" class="todo-line" :class="{done:row.done, 'personal-todo':row.personal}">
+      <component :is="row.personal ? 'label' : 'RouterLink'" v-for="(row, index) in visibleRows" :key="row.id"
+        :to="row.to" class="todo-line enter" :class="{done:row.done, 'personal-todo':row.personal}"
+        :style="{animationDelay:(index*70)+'ms'}">
         <input v-if="row.personal" class="todo-checkbox" type="checkbox" :checked="row.done"
           :aria-label="row.title" :aria-disabled="savingCompletion" @click.prevent="toggle(row)">
         <Check v-else-if="row.done" :size="15" aria-hidden="true" />
@@ -189,4 +190,9 @@ defineExpose({reveal})
   .todo-checkbox:checked::after {color:CanvasText}
 }
 .todo-line.done .todo-name{color:#64748b;}.todo-line.done .todo-name strong,.todo-line.done .todo-name small{text-decoration:line-through}
+
+/* 列表逐行入场：待办按 45ms 递增错开 */
+@keyframes todo-enter { from { opacity: 0; transform: translateY(6px) } to { opacity: 1; transform: none } }
+.todo-line.enter { animation: todo-enter .45s cubic-bezier(.22,.68,.32,1) both }
+@media (prefers-reduced-motion: reduce) { .todo-line.enter { animation: none } }
 </style>
